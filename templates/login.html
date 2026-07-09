@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connexion — Bambu Control</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link
+    rel="icon"
+    type="image/png"
+    href="{{ url_for('static', filename='images/BambuLab.png') }}"
+>
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-panel">
+      <div class="login-header">
+        <div class="glyph">B</div>
+        <h1>BAMBU CONTROL</h1>
+        <p>ACCÈS TERMINAL</p>
+      </div>
+
+      {% if error %}
+      <div class="login-error">{{ error }}</div>
+      {% endif %}
+
+      <form method="POST" action="{{ url_for('login') }}">
+        <div class="field">
+          <label for="username">Identifiant</label>
+          <input type="text" id="username" name="username" autocomplete="username" required autofocus>
+        </div>
+        <div class="field">
+          <label for="password">Mot de passe</label>
+          <input type="password" id="password" name="password" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="btn-primary">Se connecter</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

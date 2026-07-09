@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bambu Control — Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link
+    rel="icon"
+    type="image/png"
+    href="{{ url_for('static', filename='images/BambuLab.png') }}"
+>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="glyph">B</div>
+      <div>
+        <h1>BAMBU CONTROL</h1>
+        <div class="subtitle">POSTE DE SURVEILLANCE</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="printer-switcher">
+        <form method="POST" action="{{ url_for('printers_select') }}" id="printer-select-form">
+          <select name="printer_id" onchange="document.getElementById('printer-select-form').submit()">
+            {% for p in printers %}
+            <option value="{{ p.id }}" {% if p.id == selected_id %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </form>
+      </div>
+      <a href="{{ url_for('printers_page') }}" class="config-link">⚙ Imprimantes</a>
+      <div class="status-pill offline" id="connection-pill">
+        <span class="status-dot"></span>
+        <span id="connection-label">CONNEXION…</span>
+      </div>
+      <a href="{{ url_for('logout') }}" class="logout-link">Déconnexion ({{ username }})</a>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <!-- ── Colonne gauche : caméra + upload + historique ── -->
+    <div class="col">
+
+      <div class="panel camera-panel">
+        <div class="camera-frame" id="camera-frame">
+          <img id="camera-img" src="" alt="Flux caméra imprimante" style="display:none;">
+          <div class="no-feed" id="no-feed-msg">
+            <span>◌</span>
+            <span>EN ATTENTE DU FLUX CAMÉRA</span>
+          </div>
+          <div class="hud-corner tl"></div>
+          <div class="hud-corner tr"></div>
+          <div class="hud-corner bl"></div>
+          <div class="hud-corner br"></div>
+          <div class="camera-overlay-bar">
+            <div class="rec-indicator idle" id="rec-indicator">
+              <span class="dot"></span>
+              <span id="rec-label">IDLE</span>
+            </div>
+            <div class="camera-clock" id="camera-clock">--:--:--</div>
+          </div>
+        </div>
+        <div class="camera-caption">
+          <div class="filename" id="file-name">Aucun fichier en cours</div>
+          <div class="layer-info" id="layer-info">Couche —/—</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Envoyer un G-code</span>
+        </div>
+        <div class="dropzone" id="dropzone">
+          <div class="icon">⇪</div>
+          <div class="main-txt">Glisse un fichier .gcode ici</div>
+          <div class="sub-txt">ou clique pour parcourir — envoyé directement sur la carte SD</div>
+          <input type="file" id="file-input" accept=".gcode">
+        </div>
+        <div class="upload-options">
+          <label style="display:flex; align-items:center; gap:6px;">
+            <input type="checkbox" id="start-print-checkbox" style="accent-color: var(--cyan);">
+            Démarrer l'impression après l'envoi
+          </label>
+        </div>
+        <div class="upload-status" id="upload-status"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Historique — température & progression</span>
+        </div>
+        <canvas class="history-chart" id="history-chart"></canvas>
+        <div class="legend">
+          <div class="legend-item"><span class="legend-dot" style="background:var(--brass)"></span> Buse (°C)</div>
+          <div class="legend-item"><span class="legend-dot" style="background:var(--cyan)"></span> Plateau (°C)</div>
+          <div class="legend-item"><span class="legend-dot" style="background:var(--sage)"></span> Progression (%)</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── Colonne droite : progression + jauges + AMS + infos ── -->
+    <div class="col">
+
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Progression</span>
+          <span class="state-badge" id="state-badge">—</span>
+        </div>
+        <div class="progress-row">
+          <span class="progress-percent" id="progress-percent">0%</span>
+          <span class="progress-remaining" id="progress-remaining">—</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Températures</span>
+        </div>
+        <div class="gauges-row" id="gauges-row">
+          <!-- généré en JS -->
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">AMS — bobines</span>
+        </div>
+        <div class="ams-row" id="ams-row">
+          <div class="ams-empty">Pas de données AMS</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Machine</span>
+        </div>
+        <div class="info-grid">
+          <div class="info-item">
+            <div class="val" id="info-speed">—</div>
+            <div class="lbl">Vitesse</div>
+          </div>
+          <div class="info-item">
+            <div class="val" id="info-wifi">—</div>
+            <div class="lbl">Wi-Fi</div>
+          </div>
+          <div class="info-item">
+            <div class="val" id="info-light">—</div>
+            <div class="lbl">Éclairage</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Contrôle</span>
+        </div>
+
+        <div class="control-warning">
+          ⚠️ Depuis janvier 2025, Bambu Lab exige une signature cryptographique
+          pour toute commande MQTT. Cette interface envoie les commandes mais
+          <strong>ne peut pas garantir leur exécution</strong> — vérifie
+          toujours sur l'imprimante. Voir le README pour plus de détails.
+        </div>
+
+        <div class="control-block">
+          <div class="control-row">
+            <span class="control-label">Éclairage</span>
+            <button class="btn-toggle" id="light-toggle" onclick="toggleLight()">—</button>
+          </div>
+        </div>
+
+        <div class="control-block">
+          <div class="control-label">Vitesse d'impression</div>
+          <div class="speed-buttons" id="speed-buttons">
+            <button data-level="1" onclick="setSpeed(1)">50%</button>
+            <button data-level="2" onclick="setSpeed(2)">100%</button>
+            <button data-level="3" onclick="setSpeed(3)">124%</button>
+            <button data-level="4" onclick="setSpeed(4)">166%</button>
+          </div>
+        </div>
+
+        <div class="control-block">
+          <div class="control-label">Consigne buse (°C)</div>
+          <div class="setpoint-row">
+            <input type="number" id="nozzle-input" min="0" max="320" step="5">
+            <button onclick="setTemperature('nozzle')">Appliquer</button>
+          </div>
+        </div>
+
+        <div class="control-block">
+          <div class="control-label">Consigne plateau (°C)</div>
+          <div class="setpoint-row">
+            <input type="number" id="bed-input" min="0" max="120" step="5">
+            <button onclick="setTemperature('bed')">Appliquer</button>
+          </div>
+        </div>
+
+        <div class="control-block" id="chamber-control-block" style="display:none;">
+          <div class="control-label">Chambre</div>
+          <div class="control-note">Lecture seule — non réglable via l'API imprimante.</div>
+        </div>
+
+        <div class="control-block">
+          <div class="control-label">Ventilateur pièce (part fan)</div>
+          <div class="slider-row">
+            <input type="range" id="fan-part-slider" min="0" max="100" value="0"
+                   oninput="onFanSliderInput('part', this.value)">
+            <span class="slider-value" id="fan-part-value">0%</span>
+          </div>
+        </div>
+
+        <div class="control-block">
+          <div class="control-label">Ventilateur auxiliaire</div>
+          <div class="slider-row">
+            <input type="range" id="fan-aux-slider" min="0" max="100" value="0"
+                   oninput="onFanSliderInput('aux', this.value)">
+            <span class="slider-value" id="fan-aux-value">0%</span>
+          </div>
+        </div>
+
+        <div class="control-block" id="fan-chamber-block" style="display:none;">
+          <div class="control-label">Ventilateur chambre</div>
+          <div class="slider-row">
+            <input type="range" id="fan-chamber-slider" min="0" max="100" value="0"
+                   oninput="onFanSliderInput('chamber', this.value)">
+            <span class="slider-value" id="fan-chamber-value">0%</span>
+          </div>
+        </div>
+
+        <div class="upload-status" id="control-status"></div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>
