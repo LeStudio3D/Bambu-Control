@@ -6,6 +6,8 @@ températures, progression, AMS, historique, et envoi de G-code vers la carte SD
 ## Installation
 
 ```bash
+git clone https://github.com/LeStudio3D/Bambu-Control.git
+cd Bambu-Control
 pip install -r requirements.txt
 ```
 
