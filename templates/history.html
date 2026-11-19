@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Historique — Bambu Control{% endblock %}
+
+{% block content %}
+<div class="filters">
+  <label>Imprimante
+    <select class="input" id="filter-printer">
+      {% for p in nav_printers %}
+      <option value="{{ p.id }}" {% if p.id == selected_id %}selected{% endif %}>{{ p.name }}</option>
+      {% endfor %}
+      {% if nav_printers|length > 1 %}<option value="all">Toutes</option>{% endif %}
+    </select>
+  </label>
+  <label>Période
+    <select class="input" id="filter-period">
+      <option value="24">24 heures</option>
+      <option value="168">7 jours</option>
+      <option value="720" selected>30 jours</option>
+    </select>
+  </label>
+  <button type="button" class="btn" id="ai-summary-btn" style="align-self: flex-end">Résumé et conseils IA</button>
+  <button type="button" class="btn btn-danger" id="history-clear" style="align-self: flex-end">Effacer l'historique</button>
+</div>
+<section class="surface" id="ai-summary" hidden style="margin-bottom: var(--gap)">
+  <div class="section">
+    <div class="section-head"><span class="label">Analyse de l'IA</span>
+      <button type="button" class="link-button" id="ai-summary-close">Fermer</button></div>
+    <div class="ai-result" id="ai-summary-text" style="margin: 0"></div>
+  </div>
+</section>
+
+<div class="history-grid">
+  <section class="surface stats">
+    <div class="stat"><div class="label">Impressions</div><div class="stat-value" id="stat-jobs">—</div></div>
+    <div class="stat"><div class="label">Réussite</div><div class="stat-value" id="stat-success">—</div></div>
+    <div class="stat"><div class="label">Temps d'impression</div><div class="stat-value" id="stat-time">—</div></div>
+    <div class="stat"><div class="label">Échecs / arrêts</div><div class="stat-value" id="stat-failed">—</div></div>
+  </section>
+
+  <section class="surface">
+    <div class="section">
+      <div class="section-head">
+        <span class="label" id="chart-title">Températures</span>
+        <button type="button" class="link-button" id="chart-reset" hidden>← Revenir à la période</button>
+      </div>
+      <div class="chart" id="chart-temperatures"></div>
+    </div>
+    <div class="section">
+      <div class="section-head"><span class="label">Progression (%)</span></div>
+      <div class="chart" id="chart-progress"></div>
+    </div>
+  </section>
+
+  <section class="surface">
+    <div class="section">
+      <div class="section-head">
+        <span class="label">Impressions</span>
+        <span class="muted">Touche une ligne pour voir ses courbes</span>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table" id="jobs-table">
+          <thead><tr>
+            <th>Début</th><th>Fichier</th><th>Durée</th><th>Statut</th><th>Avancement</th><th>Filament (≈)</th><th>Erreur</th><th>IA</th>
+          </tr></thead>
+          <tbody><tr><td colspan="8" class="empty-cell">Chargement…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="surface">
+    <div class="section">
+      <div class="section-head"><span class="label">Erreurs signalées par l'imprimante</span></div>
+      <div class="table-scroll">
+        <table class="data-table" id="errors-table">
+          <thead><tr><th>Date</th><th>Code</th><th>État</th><th>Impression</th><th></th></tr></thead>
+          <tbody><tr><td colspan="5" class="empty-cell">Chargement…</td></tr></tbody>
+        </table>
+      </div>
+      <p class="hint">Le code (ex. 0300-400C) se recherche sur le wiki Bambu Lab ou dans Bambu Studio.</p>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/charts.js', v=asset_version) }}"></script>
+<script src="{{ url_for('static', filename='js/history.js', v=asset_version) }}"></script>
+{% endblock %}

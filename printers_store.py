@@ -1,27 +1,44 @@
 """
-Stockage des imprimantes configurées, dans un simple fichier JSON local
-(printers.json). Pas besoin d'une vraie base pour ça, c'est juste de la
-config qui change rarement.
+Stockage des imprimantes configurées dans data/printers.json.
+Pas besoin d'une vraie base : c'est de la config qui change rarement.
 """
 import json
+import os
 import threading
 import uuid
-from pathlib import Path
 
-PRINTERS_PATH = Path(__file__).parent / "printers.json"
+import config
+
 _lock = threading.Lock()
+
+EDITABLE_FIELDS = ("name", "model", "ip", "access_code", "serial", "has_chamber_override")
 
 
 def _read_all() -> list:
-    if not PRINTERS_PATH.exists():
+    if not config.PRINTERS_PATH.exists():
         return []
-    with open(PRINTERS_PATH, "r", encoding="utf-8") as f:
+    with open(config.PRINTERS_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def _write_all(printers: list):
-    with open(PRINTERS_PATH, "w", encoding="utf-8") as f:
+    config.PRINTERS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = config.PRINTERS_PATH.with_suffix(".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(printers, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, config.PRINTERS_PATH)  # écriture atomique : jamais de fichier à moitié écrit
+
+
+def public_view(printer: dict) -> dict:
+    """Version sans secrets (access code, n° de série) pour les templates / l'API."""
+    return {
+        "id": printer["id"],
+        "name": printer["name"],
+        "model": printer.get("model", "OTHER"),
+        "ip": printer.get("ip", ""),
+        "has_chamber_override": printer.get("has_chamber_override"),
+        "serial_hint": "…" + printer.get("serial", "")[-4:] if printer.get("serial") else "",
+    }
 
 
 def list_printers() -> list:
@@ -48,7 +65,7 @@ def add_printer(name: str, model: str, ip: str, access_code: str,
             "ip": ip,
             "access_code": access_code,
             "serial": serial,
-            "has_chamber_override": has_chamber_override,  # None = utiliser le défaut du modèle
+            "has_chamber_override": has_chamber_override,  # None = défaut du modèle
         }
         printers.append(new_printer)
         _write_all(printers)
@@ -56,11 +73,12 @@ def add_printer(name: str, model: str, ip: str, access_code: str,
 
 
 def update_printer(printer_id: str, **fields) -> dict | None:
+    clean = {k: v for k, v in fields.items() if k in EDITABLE_FIELDS}
     with _lock:
         printers = _read_all()
         for p in printers:
             if p["id"] == printer_id:
-                p.update(fields)
+                p.update(clean)
                 _write_all(printers)
                 return p
     return None

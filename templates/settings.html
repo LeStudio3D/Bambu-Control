@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+{% block title %}Paramètres — Bambu Control{% endblock %}
+
+{% block content %}
+{% for category, message in messages %}
+<div class="alert {{ 'alert-error' if category == 'error' else 'alert-ok' }}">{{ message }}</div>
+{% endfor %}
+<div class="columns">
+  <div class="stack">
+    <section class="surface">
+      <div class="section">
+        <div class="section-head"><span class="label">Imprimantes</span></div>
+        {% if printers %}
+        <div id="printer-list">
+          {% for p in printers %}
+          <div class="printer-block">
+          <div class="list-item" data-printer="{{ p.id }}">
+            <div style="min-width: 0">
+              <div class="name">{{ p.name }}</div>
+              <div class="meta">{{ model_labels.get(p.model, p.model) }} · <span class="mono">{{ p.ip }}</span>
+                {% if p.has_chamber_override == true %} · capteur de chambre forcé{% endif %}
+                {% if p.has_chamber_override == false %} · capteur de chambre ignoré{% endif %}</div>
+            </div>
+            <div class="list-actions">
+              <span class="conn connecting" data-conn><span class="conn-dot"></span><span data-conn-label>…</span></span>
+            </div>
+          </div>
+          <div class="printer-actions">
+            {% if p.id != selected_id %}
+            <form method="POST" action="{{ url_for('printers_select') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="printer_id" value="{{ p.id }}">
+              <input type="hidden" name="next" value="{{ url_for('settings_page') }}">
+              <button type="submit" class="btn btn-small">Utiliser</button>
+            </form>
+            {% else %}<span class="pill-active">Imprimante active</span>{% endif %}
+            <button type="button" class="btn btn-small" data-edit-toggle="{{ p.id }}">Modifier</button>
+            <button type="button" class="btn btn-small" data-test-saved="{{ p.id }}">Tester</button>
+            <form method="POST" action="{{ url_for('printers_delete', printer_id=p.id) }}" data-delete="{{ p.name }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-small btn-danger">Supprimer</button>
+            </form>
+          </div>
+          <div class="check-results" data-results="{{ p.id }}" hidden></div>
+          <form method="POST" action="{{ url_for('printers_edit', printer_id=p.id) }}" class="edit-form" data-edit="{{ p.id }}" hidden>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-grid">
+              <div class="field"><label>Nom</label><input type="text" name="name" value="{{ p.name }}" required></div>
+              <div class="field"><label>Modèle</label>
+                <select name="model">
+                  {% for key, label in model_choices %}<option value="{{ key }}" {% if key == p.model %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                </select></div>
+              <div class="field"><label>Adresse IP</label><input type="text" name="ip" value="{{ p.ip }}" inputmode="decimal" required></div>
+              <div class="field"><label>Capteur de chambre</label>
+                <select name="has_chamber_override">
+                  <option value="auto" {% if p.has_chamber_override is none %}selected{% endif %}>Automatique</option>
+                  <option value="yes" {% if p.has_chamber_override == true %}selected{% endif %}>Forcer : présent</option>
+                  <option value="no" {% if p.has_chamber_override == false %}selected{% endif %}>Forcer : absent</option>
+                </select></div>
+              <div class="field"><label>Access code</label>
+                <input type="password" name="access_code" autocomplete="off" placeholder="inchangé si vide"></div>
+              <div class="field"><label>Numéro de série</label>
+                <input type="text" name="serial" autocomplete="off" placeholder="{{ p.serial_hint }} — inchangé si vide"></div>
+            </div>
+            <div class="printer-actions">
+              <button type="button" class="btn" data-test-form>Tester ces réglages</button>
+              <button type="submit" class="btn btn-primary">Enregistrer</button>
+            </div>
+          </form>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="muted">Aucune imprimante pour l'instant : ajoute la tienne avec le formulaire.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="surface">
+      <div class="section">
+        <div class="label" style="margin-bottom: 16px">Ajouter une imprimante</div>
+        {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+        <form method="POST" action="{{ url_for('printers_add') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="field"><label for="name">Nom</label>
+            <input type="text" id="name" name="name" placeholder="Ex. A1 bureau" required></div>
+          <div class="field"><label for="model">Modèle</label>
+            <select id="model" name="model">
+              {% for key, label in model_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+            </select></div>
+          <div class="field"><label for="ip">Adresse IP</label>
+            <input type="text" id="ip" name="ip" placeholder="192.168.1.xxx" inputmode="decimal" required></div>
+          <div class="field"><label for="access_code">Access code (écran de l'imprimante → Réseau)</label>
+            <input type="password" id="access_code" name="access_code" autocomplete="off" required></div>
+          <div class="field"><label for="serial">Numéro de série</label>
+            <input type="text" id="serial" name="serial" autocomplete="off" required></div>
+          <div class="field"><label for="has_chamber_override">Capteur de température de chambre</label>
+            <select id="has_chamber_override" name="has_chamber_override">
+              <option value="auto">Automatique (selon le modèle)</option>
+              <option value="yes">Forcer : présent (capteur ajouté)</option>
+              <option value="no">Forcer : absent</option>
+            </select></div>
+          <div class="check-results" id="add-results" hidden></div>
+          <div class="form-buttons">
+            <button type="button" class="btn btn-lg" data-test-form>Tester la connexion</button>
+            <button type="submit" class="btn btn-primary btn-lg">Ajouter l'imprimante</button>
+          </div>
+          <p class="hint">Le test vérifie le réseau, l'access code, le numéro de série, la carte SD et la caméra (≈ 15 s).</p>
+        </form>
+      </div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="surface">
+      <div class="section">
+        <div class="section-head">
+          <span class="label">Compte</span>
+          <form method="POST" action="{{ url_for('logout') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-small">Se déconnecter</button>
+          </form>
+        </div>
+        <form method="POST" action="{{ url_for('settings_account') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="field"><label for="acc-username">Identifiant</label>
+            <input type="text" id="acc-username" name="username" value="{{ username }}" autocomplete="username" required></div>
+          <div class="form-grid">
+            <div class="field"><label for="acc-new">Nouveau mot de passe</label>
+              <input type="password" id="acc-new" name="new_password" autocomplete="new-password" minlength="8"
+                     placeholder="inchangé si vide"></div>
+            <div class="field"><label for="acc-confirm">Confirmation</label>
+              <input type="password" id="acc-confirm" name="new_password_confirm" autocomplete="new-password"></div>
+          </div>
+          <div class="field"><label for="acc-current">Mot de passe actuel (obligatoire pour valider)</label>
+            <input type="password" id="acc-current" name="current_password" autocomplete="current-password" required></div>
+          <button type="submit" class="btn btn-primary">Enregistrer le compte</button>
+        </form>
+      </div>
+    </section>
+
+    <section class="surface">
+      <div class="section">
+        <div class="label" style="margin-bottom: 14px">Serveur</div>
+        <form method="POST" action="{{ url_for('settings_server') }}" class="row" style="align-items: flex-end">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="field" style="flex: 1; margin: 0"><label for="port">Port de la page web</label>
+            <input type="number" id="port" name="port" value="{{ port }}" min="1024" max="65535" required></div>
+          <button type="submit" class="btn">Enregistrer</button>
+        </form>
+        <p class="hint">Adresse actuelle : http://&lt;ip-de-cette-machine&gt;:{{ port }} — un nouveau port
+          s'applique au prochain démarrage de Bambu Control.</p>
+      </div>
+    </section>
+
+    <section class="surface">
+      <div class="section">
+        <div class="label" style="margin-bottom: 14px">Démarrage</div>
+        {% if startup.can_autostart or startup.can_kiosk %}
+        <form method="POST" action="{{ url_for('settings_startup') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          {% if startup.can_autostart %}
+          <label class="check toggle-row"><input type="checkbox" name="autostart" {% if startup.autostart_enabled %}checked{% endif %}>
+            <span><strong>Démarrer Bambu Control avec la machine</strong>
+              <span class="muted">Le serveur se lance tout seul et redémarre s'il s'arrête.</span></span></label>
+          {% endif %}
+          {% if startup.can_kiosk %}
+          <label class="check toggle-row"><input type="checkbox" name="kiosk" {% if startup.kiosk_enabled %}checked{% endif %}>
+            <span><strong>Ouvrir en plein écran au démarrage (mode kiosk)</strong>
+              <span class="muted">Chromium affiche la console dès l'ouverture de la session.
+              Pour le fermer : Alt+F4 ou <code class="mono">bambu-kiosk stop</code>.</span></span></label>
+          {% if not startup.browser %}<div class="alert alert-warn" style="margin-top: 12px">Chromium n'est pas installé :
+            <code>sudo apt install chromium-browser</code></div>{% endif %}
+          {% endif %}
+          <button type="submit" class="btn btn-primary" style="margin-top: 16px">Appliquer</button>
+        </form>
+        {% if startup.raspberry_pi %}
+        <div class="admin-commands">
+          <div class="label" style="margin: 22px 0 8px">Raspberry Pi — à lancer une fois dans un terminal</div>
+          <p class="muted" style="margin: 0 0 10px">Ces réglages du système demandent ton mot de passe administrateur,
+            l'appli ne peut donc pas les faire elle-même.</p>
+          <div class="command-line"><span>Démarrer sur le bureau sans mot de passe (nécessaire au kiosk)</span>
+            <code class="mono">{{ startup.commands.autologin }}</code></div>
+          <div class="command-line"><span>Empêcher l'écran de se mettre en veille</span>
+            <code class="mono">{{ startup.commands.no_blanking }}</code></div>
+        </div>
+        {% endif %}
+        {% else %}
+        <p class="muted" style="margin: 0">Le démarrage automatique et le plein écran se règlent ici sous Linux
+          (Raspberry Pi). Sur {{ startup.system == "Darwin" and "macOS" or startup.system }}, voir la section
+          « Démarrage automatique » du README.</p>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+</div>
+
+<section class="surface" id="ai" style="margin-top: var(--gap)">
+  <form method="POST" action="{{ url_for('ai.settings_ai') }}" id="ai-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="section">
+      <div class="section-head">
+        <span class="label">Intelligence artificielle</span>
+        <label class="check" style="margin: 0"><input type="checkbox" name="enabled" {% if ai.enabled %}checked{% endif %}> Activer</label>
+      </div>
+      {# Un bloc « service IA » : fournisseur, adresse, clé, modèle, bouton de test #}
+      {% macro ai_service(target, prefix, provider, url, key_hint, model_name, model, model_hint) %}
+      <div class="ai-service" data-ai-service="{{ target }}">
+        <div class="field"><label for="ai-{{ target }}-provider">Fournisseur</label>
+          <select id="ai-{{ target }}-provider" name="{{ prefix }}provider" data-ai-provider>
+            {% for key, p in ai_providers.items() %}
+            <option value="{{ key }}" data-url="{{ p.url }}" {% if key == provider %}selected{% endif %}>{{ p.label }}</option>
+            {% endfor %}
+          </select></div>
+        <div class="field"><label for="ai-{{ target }}-url">Adresse du service <span class="muted">(vide = adresse par défaut)</span></label>
+          <input type="text" id="ai-{{ target }}-url" name="{{ prefix }}base_url" value="{{ url }}" autocomplete="off" data-ai-url></div>
+        <div class="field"><label for="ai-{{ target }}-key">Clé API</label>
+          <input type="password" id="ai-{{ target }}-key" name="{{ prefix }}api_key" autocomplete="off" data-ai-key
+                 placeholder="{{ key_hint ~ ' enregistrée — vide = inchangée' if key_hint else 'inutile pour Ollama en local' }}">
+          {% if key_hint %}<label class="check" style="margin-top: 6px"><input type="checkbox" name="clear_{{ prefix }}api_key"> Supprimer la clé enregistrée</label>{% endif %}
+        </div>
+        <div class="field"><label for="ai-{{ target }}-model">Modèle</label>
+          <input type="text" id="ai-{{ target }}-model" name="{{ model_name }}" value="{{ model }}" list="ai-{{ target }}-models"
+                 autocomplete="off" placeholder="{{ model_hint }}">
+          <datalist id="ai-{{ target }}-models"></datalist></div>
+        <div class="row" style="justify-content: flex-start; flex-wrap: wrap">
+          <button type="button" class="btn btn-small" data-ai-test>Tester et charger les modèles</button>
+          <span class="muted" data-ai-result></span>
+        </div>
+      </div>
+      {% endmacro %}
+
+      <div class="columns ai-columns" style="gap: var(--gap)">
+        <div>
+          <div class="label" style="margin-bottom: 4px">Texte</div>
+          <p class="hint" style="margin-top: 0">Assistant, explications d'erreurs, résumés. Un petit modèle local suffit
+            (ex. Ollama sur le Raspberry Pi).</p>
+          {{ ai_service("text", "", ai.provider, ai.base_url, ai.api_key_hint, "text_model", ai.text_model,
+                        "ex. qwen3.5:2b, llama3.2, gpt-4o-mini") }}
+        </div>
+        <div>
+          <div class="label" style="margin-bottom: 4px">Images (caméra, plateau, vignettes)</div>
+          <p class="hint" style="margin-top: 0">Demande un modèle « vision », plus lourd : Ollama Cloud ou un PC
+            avec carte graphique évitent de surcharger le Pi.</p>
+          <label class="check" style="margin-bottom: 10px"><input type="checkbox" name="vision_same" id="ai-vision-same"
+            {% if ai.vision_same %}checked{% endif %}> Utiliser le même service que pour le texte</label>
+          {{ ai_service("vision", "vision_", ai.vision_provider, ai.vision_base_url, ai.vision_api_key_hint,
+                        "vision_model", ai.vision_model, "ex. gemma4:31b, qwen2.5vl, llava") }}
+        </div>
+      </div>
+      <div class="field" style="max-width: 320px; margin-top: 14px"><label for="ai-timeout">Délai maximum d'une réponse (secondes)</label>
+        <input type="number" id="ai-timeout" name="timeout" value="{{ ai.timeout }}" min="10" max="600"></div>
+      <p class="hint">Ollama sur un autre appareil : adresse <code class="mono">http://ip-de-l-appareil:11434</code>, avec
+        <code class="mono">OLLAMA_HOST=0.0.0.0</code> sur cet appareil. Ollama Cloud : crée une clé sur ollama.com.
+        Les clés restent sur cette machine, elles ne sont jamais renvoyées au navigateur.</p>
+    </div>
+
+    <div class="section">
+      <div class="label" style="margin-bottom: 6px">Automatisations</div>
+      <label class="check toggle-row"><input type="checkbox" name="watch_enabled" {% if ai.watch_enabled %}checked{% endif %}>
+        <span><strong>Surveiller l'impression avec la caméra (IA)</strong>
+          <span class="muted">Une image est analysée toutes les
+            <input type="number" name="watch_interval_min" value="{{ ai.watch_interval_min }}" min="1" max="120" class="input-inline"> minutes
+            pour repérer un échec (spaghetti, pièce décollée…).</span></span></label>
+      <label class="check toggle-row"><input type="checkbox" name="watch_log" {% if ai.watch_log %}checked{% endif %}>
+        <span><strong>Garder chaque contrôle dans les alertes, même sans problème</strong>
+          <span class="muted">Photo + description de l'IA à chaque analyse (photos gardées 3 jours).
+            Ces contrôles « RAS » ne font pas monter le compteur d'alertes.</span></span></label>
+      <label class="check toggle-row"><input type="checkbox" name="auto_pause" {% if ai.auto_pause %}checked{% endif %}>
+        <span><strong>Mettre en pause automatiquement si un échec est détecté</strong>
+          <span class="muted">Seulement si l'IA est sûre à au moins
+            <input type="number" name="pause_confidence" value="{{ ai.pause_confidence }}" min="50" max="100" class="input-inline"> %.
+            L'IA n'arrête jamais une impression : la pause se reprend d'un clic.</span></span></label>
+      <label class="check toggle-row"><input type="checkbox" name="plate_check" {% if ai.plate_check %}checked{% endif %}>
+        <span><strong>Vérifier que le plateau est vide avant chaque lancement (IA)</strong>
+          <span class="muted">Si l'IA voit quelque chose, elle demande confirmation avant de lancer.</span></span></label>
+      <label class="check toggle-row"><input type="checkbox" name="finish_photo" {% if ai.finish_photo %}checked{% endif %}>
+        <span><strong>Photo et commentaire en fin d'impression (IA)</strong>
+          <span class="muted">Gardés dans l'historique.</span></span></label>
+      <label class="check toggle-row"><input type="checkbox" name="finish_light_off" {% if ai.finish_light_off %}checked{% endif %}>
+        <span><strong>Éteindre la lumière en fin d'impression</strong>
+          <span class="muted">Sans IA.</span></span></label>
+      <label class="check toggle-row"><input type="checkbox" name="filament_alert" {% if ai.filament_alert %}checked{% endif %}>
+        <span><strong>Prévenir si une bobine risque de manquer avant la fin</strong>
+          <span class="muted">Sans IA, estimation pour les bobines Bambu Lab.</span></span></label>
+      <label class="check toggle-row"><input type="checkbox" name="daily_summary" {% if ai.daily_summary %}checked{% endif %}>
+        <span><strong>Résumé quotidien (IA)</strong>
+          <span class="muted">Chaque jour à <input type="time" name="daily_summary_time" value="{{ ai.daily_summary_time }}" class="input-inline">,
+            dans les alertes.</span></span></label>
+      <button type="submit" class="btn btn-primary" style="margin-top: 16px">Enregistrer les réglages IA</button>
+    </div>
+  </form>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/settings.js', v=asset_version) }}"></script>
+{% endblock %}

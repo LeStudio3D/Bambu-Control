@@ -1,0 +1,25 @@
+# Données locales : contiennent access codes, n° de série, hash admin, SECRET_KEY
+data/
+printers.json
+settings.json
+*.db
+*.db-wal
+*.db-shm
+uploads_tmp/*
+!uploads_tmp/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Éditeurs / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Archives générées
+*.zip

@@ -3,28 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0d1013">
   <title>Connexion — Bambu Control</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-  <link
-    rel="icon"
-    type="image/png"
-    href="{{ url_for('static', filename='images/BambuLab.png') }}"
->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/console.css', v=asset_version) }}">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/BambuLab.png') }}">
 </head>
 <body>
-  <div class="login-wrap">
-    <div class="login-panel">
-      <div class="login-header">
-        <div class="glyph">B</div>
-        <h1>BAMBU CONTROL</h1>
-        <p>ACCÈS TERMINAL</p>
-      </div>
+  <div class="login">
+    <div class="surface login-box">
+      <h1>Bambu Control</h1>
+      <p class="muted">Console de supervision</p>
 
-      {% if error %}
-      <div class="login-error">{{ error }}</div>
-      {% endif %}
-
-      <form method="POST" action="{{ url_for('login') }}">
+      {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+      <form method="POST" action="{{ url_for('login', next=request.args.get('next')) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="field">
           <label for="username">Identifiant</label>
           <input type="text" id="username" name="username" autocomplete="username" required autofocus>
@@ -33,7 +25,7 @@
           <label for="password">Mot de passe</label>
           <input type="password" id="password" name="password" autocomplete="current-password" required>
         </div>
-        <button type="submit" class="btn-primary">Se connecter</button>
+        <button type="submit" class="btn btn-primary btn-lg">Se connecter</button>
       </form>
     </div>
   </div>

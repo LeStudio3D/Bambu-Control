@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Impressions — Bambu Control{% endblock %}
+
+{% block content %}
+<div class="columns">
+  <div class="stack">
+    <section class="surface">
+      <div class="section">
+        <div class="section-head"><span class="label">Envoyer un fichier</span><span class="muted">vers la carte SD de l'imprimante</span></div>
+        <label class="dropzone" id="dropzone">
+          <input type="file" id="file-input" accept=".3mf,.gcode">
+          <strong>Glisse un fichier ici ou touche pour choisir</strong>
+          <span class="muted">.gcode.3mf (tranché avec Bambu Studio / OrcaSlicer) ou .gcode</span>
+        </label>
+
+        <label class="check"><input type="checkbox" id="start-print"> Lancer l'impression après l'envoi
+          <span class="muted">(les options de lancement s'ouvrent une fois le fichier envoyé)</span></label>
+
+        <div class="upload-progress" id="upload-progress" hidden>
+          <div class="row"><span id="upload-name" class="muted">—</span><strong id="upload-percent">0 %</strong></div>
+          <div class="progress"><div class="progress-fill" id="upload-bar"></div></div>
+        </div>
+        <p class="hint">Le lancement à distance demande que le fichier ait été tranché pour cette imprimante.</p>
+      </div>
+    </section>
+
+    <section class="surface">
+      <div class="section">
+        <div class="section-head">
+          <span class="label">Sur la carte SD</span>
+          <button type="button" class="btn btn-small" id="refresh-files">Actualiser</button>
+        </div>
+        <div id="sd-files"><div class="muted">Chargement…</div></div>
+      </div>
+    </section>
+
+    <section class="surface">
+      <div class="section">
+        <div class="section-head">
+          <span class="label">File d'impression</span>
+          <span class="muted">proposée sur l'accueil quand l'imprimante est libre</span>
+        </div>
+        <div id="queue"><div class="muted">Chargement…</div></div>
+      </div>
+    </section>
+  </div>
+
+  <section class="surface">
+    <div class="section">
+      <div class="section-head">
+        <span class="label">Dernières impressions</span>
+        <a class="link-button" href="{{ url_for('history_page') }}">Tout l'historique →</a>
+      </div>
+      <div id="recent-jobs"><div class="muted">Chargement…</div></div>
+    </div>
+  </section>
+</div>
+
+<dialog class="dialog dialog-wide" id="launch-dialog" data-printer-model="{{ model_labels.get(selected_printer.model, '') if selected_printer else '' }}">
+  <form method="dialog">
+    <div class="dialog-body">
+      <h2 id="launch-title">Lancer l'impression ?</h2>
+      <p id="launch-name" class="mono" style="word-break: break-all"></p>
+      <div class="alert alert-warn" id="launch-model-warning" hidden></div>
+
+      <div id="launch-3mf-options">
+        <div class="muted" id="launch-loading">Lecture du fichier…</div>
+        <div class="field" id="launch-plate-field">
+          <label for="launch-plate">Plateau</label>
+          <select id="launch-plate"></select>
+        </div>
+
+        <div class="field">
+          <label>Filament</label>
+          <div class="segmented segmented-2" id="launch-source">
+            <button type="button" class="btn" data-source="ams">AMS</button>
+            <button type="button" class="btn" data-source="external">Bobine externe</button>
+          </div>
+        </div>
+        <div id="launch-mapping"></div>
+
+        <div class="launch-options">
+          <label class="check"><input type="checkbox" id="launch-bed-leveling" checked> Nivellement automatique du plateau</label>
+          <label class="check"><input type="checkbox" id="launch-flow-cali" checked> Calibration du flux dynamique</label>
+          <label class="check"><input type="checkbox" id="launch-timelapse"> Timelapse
+            <span class="muted" id="launch-timelapse-note"></span></label>
+        </div>
+      </div>
+      <p class="hint">Vérifie que le plateau est vide et propre avant de lancer.</p>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn" value="cancel">Annuler</button>
+      <button class="btn btn-primary" value="ok" id="launch-ok">Lancer</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/prints.js', v=asset_version) }}"></script>
+{% endblock %}

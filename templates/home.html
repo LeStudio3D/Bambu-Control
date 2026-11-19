@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Accueil — Bambu Control{% endblock %}
+
+{% block content %}
+<div class="unavailable" id="unavailable" hidden>
+  <div>
+    <strong>Imprimante indisponible</strong>
+    <span id="unavailable-reason">—</span>
+    <div class="muted">Nouvelle tentative automatique en cours. Les données affichées sont les dernières connues.</div>
+  </div>
+</div>
+
+<div class="queue-banner" id="queue-banner" hidden>
+  <div>
+    <strong id="queue-title">Prochaine impression prête</strong>
+    <span class="muted" id="queue-detail"></span>
+  </div>
+  <div class="list-actions">
+    <button type="button" class="btn btn-small" id="queue-recheck">Revérifier le plateau</button>
+    <button type="button" class="btn btn-small" id="queue-skip">Retirer de la file</button>
+    <button type="button" class="btn btn-primary" id="queue-launch">Lancer</button>
+  </div>
+</div>
+
+<div class="home" id="home">
+  <div class="home-left">
+    <div class="camera" id="camera">
+      <img alt="Caméra de l'imprimante" hidden>
+      <div class="camera-message"><strong>Connexion à la caméra…</strong></div>
+      <div class="camera-bar">
+        <span class="chip" id="camera-chip"><span class="conn-dot"></span><span id="camera-chip-label">—</span></span>
+        <button type="button" class="icon-btn" data-fullscreen title="Plein écran (double-clic sur l'image)">{{ icon("fullscreen") }}</button>
+      </div>
+    </div>
+
+    <section class="surface job dim-when-offline">
+      <div class="job-top">
+        <div style="min-width: 0">
+          <div class="label">Fichier</div>
+          <div class="job-file" id="job-file">Aucune impression</div>
+        </div>
+        <div class="job-percent"><span id="job-percent">0</span><small>%</small></div>
+      </div>
+      <div class="progress"><div class="progress-fill" id="job-progress"></div></div>
+      <div class="job-facts">
+        <div class="fact"><div class="label">Temps restant</div><div class="value" id="job-remaining">—</div></div>
+        <div class="fact"><div class="label">Temps écoulé</div><div class="value" id="job-elapsed">—</div></div>
+        <div class="fact"><div class="label">Couche</div><div class="value" id="job-layer">—</div></div>
+      </div>
+    </section>
+  </div>
+
+  <aside class="surface home-right">
+    <section class="section dim-when-offline">
+      <div class="label">État</div>
+      <div class="state-word" id="state-word">—</div>
+      <div class="state-sub" id="state-sub"></div>
+      <button type="button" class="link-button" id="btn-explain" hidden>Expliquer cette erreur avec l'IA →</button>
+      <div class="ai-line" id="ai-line" hidden><span class="dot"></span><span id="ai-line-text"></span></div>
+    </section>
+
+    <section class="section dim-when-offline">
+      <div class="label" style="margin-bottom: 12px">Températures</div>
+      <div class="temps">
+        <div class="temp nozzle"><div class="label">Buse</div>
+          <div class="temp-value"><span id="t-nozzle">—</span><small>°C</small></div>
+          <div class="temp-target" id="t-nozzle-target">—</div></div>
+        <div class="temp bed"><div class="label">Plateau</div>
+          <div class="temp-value"><span id="t-bed">—</span><small>°C</small></div>
+          <div class="temp-target" id="t-bed-target">—</div></div>
+        <div class="temp chamber" id="t-chamber-block" hidden><div class="label">Chambre</div>
+          <div class="temp-value"><span id="t-chamber">—</span><small>°C</small></div>
+          <div class="temp-target">lecture seule</div></div>
+      </div>
+    </section>
+
+    <section class="section dim-when-offline">
+      <div class="section-head"><span class="label">AMS</span><span class="muted" id="ams-hint"></span></div>
+      <div class="ams-units" id="ams"><div class="ams-empty-msg">En attente des données…</div></div>
+    </section>
+
+    <section class="section quick">
+      <button type="button" class="btn btn-lg btn-primary" id="btn-start">{{ icon("play") }}<span id="btn-start-label">Lancer une impression</span></button>
+      <button type="button" class="btn btn-lg" id="btn-pause">{{ icon("pause") }}Pause</button>
+      <button type="button" class="btn btn-lg btn-danger" id="btn-stop">{{ icon("stop") }}Arrêter</button>
+      <button type="button" class="btn btn-lg" id="btn-light">{{ icon("light") }}<span id="btn-light-label">Lumière</span></button>
+    </section>
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/camera.js', v=asset_version) }}"></script>
+<script src="{{ url_for('static', filename='js/home.js', v=asset_version) }}"></script>
+{% endblock %}

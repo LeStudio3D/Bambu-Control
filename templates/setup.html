@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0d1013">
+  <title>Bienvenue — Bambu Control</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/console.css', v=asset_version) }}">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/BambuLab.png') }}">
+</head>
+<body>
+  <div class="login">
+    <div class="surface login-box">
+      <h1>Bienvenue</h1>
+      <p class="muted">Première utilisation : crée le compte qui protège l'accès à Bambu Control.</p>
+
+      {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+
+      <form method="POST" action="{{ url_for('setup') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if not local %}
+        <div class="field">
+          <label for="setup_code">Code de configuration</label>
+          <input type="text" id="setup_code" name="setup_code" autocomplete="off" autocapitalize="characters"
+                 maxlength="6" required autofocus class="mono">
+          <span class="hint" style="margin: 0">Affiché dans le terminal où tourne Bambu Control. Il évite qu'un
+            autre appareil du réseau crée le compte à ta place.</span>
+        </div>
+        {% endif %}
+        <div class="field">
+          <label for="username">Identifiant</label>
+          <input type="text" id="username" name="username" value="admin" autocomplete="username" required
+                 {% if local %}autofocus{% endif %}>
+        </div>
+        <div class="field">
+          <label for="password">Mot de passe (8 caractères minimum)</label>
+          <input type="password" id="password" name="password" autocomplete="new-password" minlength="8" required>
+        </div>
+        <div class="field">
+          <label for="password_confirm">Confirme le mot de passe</label>
+          <input type="password" id="password_confirm" name="password_confirm" autocomplete="new-password" minlength="8" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-lg">Créer le compte</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

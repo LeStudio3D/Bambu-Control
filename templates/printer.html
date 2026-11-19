@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Imprimante — Bambu Control{% endblock %}
+
+{% block content %}
+<div class="alert alert-warn" id="dev-mode-warning" hidden>
+  <strong>L'imprimante n'a pas appliqué la dernière commande.</strong>
+  Les firmwares récents ignorent les commandes tant que le <strong>mode développeur</strong> n'est pas activé :
+  écran de l'imprimante → Paramètres → Réseau → Mode LAN → Mode développeur.
+  Sans lui, Bambu Control reste utilisable en surveillance (caméra, températures, AMS, historique, envoi de fichiers).
+</div>
+
+<div class="columns">
+  <div class="stack">
+    <section class="surface">
+      <div class="section">
+        <div class="row">
+          <div><div class="label">Éclairage</div><div class="muted" id="light-state">—</div></div>
+          <button type="button" class="btn btn-lg" id="btn-light">{{ icon("light") }}<span id="btn-light-label">Basculer</span></button>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-head"><span class="label">Vitesse d'impression</span><span class="muted">pendant une impression</span></div>
+        <div class="segmented" id="speed">
+          <button type="button" class="btn" data-level="1">Silencieux<small>50 %</small></button>
+          <button type="button" class="btn" data-level="2">Standard<small>100 %</small></button>
+          <button type="button" class="btn" data-level="3">Sport<small>124 %</small></button>
+          <button type="button" class="btn" data-level="4">Ludicrous<small>166 %</small></button>
+        </div>
+      </div>
+    </section>
+
+    <section class="surface">
+      <div class="section">
+        <div class="section-head"><span class="label">Consigne buse</span><span class="muted" id="nozzle-now">actuelle —</span></div>
+        <div class="stepper" data-part="nozzle_temp" data-max="320">
+          <button type="button" class="btn btn-lg" data-step="-5" aria-label="Moins 5 degrés">−</button>
+          <input class="input" type="number" min="0" max="320" step="5" inputmode="numeric" aria-label="Consigne buse en °C">
+          <button type="button" class="btn btn-lg" data-step="5" aria-label="Plus 5 degrés">+</button>
+          <button type="button" class="btn btn-lg btn-primary" data-apply>Appliquer</button>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-head"><span class="label">Consigne plateau</span><span class="muted" id="bed-now">actuelle —</span></div>
+        <div class="stepper" data-part="bed_temp" data-max="120">
+          <button type="button" class="btn btn-lg" data-step="-5" aria-label="Moins 5 degrés">−</button>
+          <input class="input" type="number" min="0" max="120" step="5" inputmode="numeric" aria-label="Consigne plateau en °C">
+          <button type="button" class="btn btn-lg" data-step="5" aria-label="Plus 5 degrés">+</button>
+          <button type="button" class="btn btn-lg btn-primary" data-apply>Appliquer</button>
+        </div>
+        <p class="hint">0 °C coupe la chauffe. La température de chambre n'est pas réglable (lecture seule).</p>
+      </div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="surface">
+      <div class="section">
+        <div class="label" style="margin-bottom: 14px">Ventilateurs</div>
+        <div class="field" data-fan="part">
+          <label>Ventilateur pièce</label>
+          <div class="slider"><input type="range" min="0" max="100" step="10" value="0"><output>—</output></div>
+        </div>
+        <div class="field" data-fan="aux" hidden>
+          <label>Ventilateur auxiliaire</label>
+          <div class="slider"><input type="range" min="0" max="100" step="10" value="0"><output>—</output></div>
+        </div>
+        <div class="field" data-fan="chamber" hidden>
+          <label>Ventilateur de chambre</label>
+          <div class="slider"><input type="range" min="0" max="100" step="10" value="0"><output>—</output></div>
+        </div>
+        <p class="hint">La commande part quand tu relâches le curseur.</p>
+      </div>
+    </section>
+
+    <section class="surface">
+      <div class="section">
+        <div class="label" style="margin-bottom: 14px">Informations</div>
+        <div class="kv">
+          <div><div class="label">État</div><div class="value" id="info-state">—</div></div>
+          <div><div class="label">Wi-Fi</div><div class="value" id="info-wifi">—</div></div>
+          <div><div class="label">Chambre</div><div class="value" id="info-chamber">—</div></div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="kv">
+          <div><div class="label">Modèle</div><div class="value">{{ model_labels.get(selected_printer.model, selected_printer.model) }}</div></div>
+          <div><div class="label">Adresse IP</div><div class="value mono">{{ selected_printer.ip }}</div></div>
+          <div><div class="label">Caméra</div><div class="value" id="info-camera">—</div></div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<section class="surface" style="margin-top: var(--gap)">
+  <div class="section">
+    <div class="section-head">
+      <span class="label">AMS et séchage</span>
+      <span class="muted">séchage à distance : AMS 2 Pro (45-65 °C) et AMS HT (45-85 °C)</span>
+    </div>
+    <div id="dry-units"><div class="ams-empty-msg">En attente des données…</div></div>
+    <p class="hint">Températures et durées préremplies d'après le guide de séchage Bambu Lab, modifiables.
+      Le séchage pendant une impression peut être refusé par l'imprimante.</p>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/printer.js', v=asset_version) }}"></script>
+{% endblock %}

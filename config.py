@@ -1,27 +1,37 @@
 """
-Configuration du dashboard Bambu Lab.
+Réglages techniques de Bambu Control.
 
-Les imprimantes elles-mêmes (IP, access code, serial) ne sont plus ici :
-elles se configurent depuis l'interface web (page "Imprimantes"), stockées
-dans printers.json. Ce fichier ne contient que la config du serveur.
+Les secrets (compte admin, SECRET_KEY) ne sont PLUS ici : ils sont dans
+data/settings.json, rempli depuis l'interface (création du compte, Paramètres).
+Les imprimantes sont dans data/printers.json (gérées depuis l'interface).
 """
 import os
-# ── Authentification dashboard ────────────────────────────
-# Génère le hash avec : python3 -c "from werkzeug.security import generate_password_hash as g; print(g('ton_mot_de_passe'))"
-ADMIN_USERNAME = os.environ.get("DASHBOARD_USER", "admin")
-ADMIN_PASSWORD_HASH = os.environ.get(
-    "DASHBOARD_PASSWORD_HASH",
-    "pbkdf2:sha256:600000$placeholder$replace_me_run_generate_hash_script"
-)
+from pathlib import Path
 
-# ── Flask ─────────────────────────────────────────────────
-SECRET_KEY = os.environ.get("FLASK_SECRET_KEY", "change-moi-en-production")
+# ── Chemins (absolus : l'appli marche quel que soit le dossier de lancement) ──
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = Path(os.environ.get("BAMBU_DATA_DIR", BASE_DIR / "data"))
+DB_PATH = DATA_DIR / "bambu_history.db"
+PRINTERS_PATH = DATA_DIR / "printers.json"
+SETTINGS_PATH = DATA_DIR / "settings.json"
+UPLOAD_TMP_DIR = DATA_DIR / "uploads_tmp"
 
-# ── Chemins ───────────────────────────────────────────────
-DB_PATH = "bambu_history.db"
-UPLOAD_TMP_DIR = "uploads_tmp"
+# ── Serveur web (surchargé par data/settings.json) ────────
+DEFAULT_HOST = "0.0.0.0"
+DEFAULT_PORT = 5000
 
-# ── Intervalles de polling (secondes) ─────────────────────
-STATUS_POLL_INTERVAL = 2       # rafraîchissement des données imprimante
-CAMERA_POLL_INTERVAL = 0.5     # ~2 images/seconde pour le flux vidéo
-HISTORY_SAVE_INTERVAL = 30     # fréquence d'enregistrement en base
+# ── Upload ────────────────────────────────────────────────
+MAX_UPLOAD_MB = 512
+ALLOWED_UPLOAD_SUFFIXES = (".gcode.3mf", ".3mf", ".gcode")
+
+# ── Intervalles (secondes) ────────────────────────────────
+STATUS_POLL_INTERVAL = 1        # lecture de l'état MQTT en mémoire
+HISTORY_SAVE_INTERVAL = 30      # fréquence d'enregistrement en base
+FIRST_REPORT_TIMEOUT_SECONDS = 20  # à la connexion : une imprimante répond en 2-3 s
+OFFLINE_AFTER_SECONDS = 45      # connexion établie puis plus aucun message → hors ligne
+RECONNECT_DELAY_SECONDS = 10
+
+# ── Sécurité login ────────────────────────────────────────
+LOGIN_MAX_ATTEMPTS = 5          # tentatives ratées autorisées…
+LOGIN_LOCK_SECONDS = 300        # …par IP sur cette durée
+SESSION_DAYS = 30               # durée de la session (pratique en mode kiosk)

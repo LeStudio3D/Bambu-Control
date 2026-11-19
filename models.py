@@ -53,3 +53,27 @@ def model_choices():
 
 def default_has_chamber(model_key: str) -> bool:
     return PRINTER_MODELS.get(model_key, PRINTER_MODELS["OTHER"])["has_chamber_sensor"]
+
+
+# Ventilateurs pilotables (M106 P1/P2/P3) par famille.
+# A1 / A1 mini / A2L : seulement le ventilateur de pièce (pas d'auxiliaire ni de chambre).
+# P1P : auxiliaire en option, donc non proposé par défaut.
+_FANS_PART_ONLY = ("part",)
+_FANS_ALL = ("part", "aux", "chamber")
+FANS_BY_MODEL = {
+    "A1": _FANS_PART_ONLY, "A1_MINI": _FANS_PART_ONLY, "A2L": _FANS_PART_ONLY,
+    "P1P": _FANS_PART_ONLY, "OTHER": _FANS_PART_ONLY,
+}
+
+
+def fans(model_key: str) -> list:
+    """Liste des ventilateurs pilotables pour ce modèle."""
+    return list(FANS_BY_MODEL.get(model_key, _FANS_ALL))
+
+
+# Protocole caméra : "tcp" (JPEG port 6000) ou "rtsp" (RTSPS port 322, nécessite ffmpeg).
+_TCP_CAMERA_MODELS = {"A1", "A1_MINI", "A2L", "P1P", "P1S", "OTHER"}
+
+
+def camera_protocol(model_key: str) -> str:
+    return "tcp" if model_key in _TCP_CAMERA_MODELS else "rtsp"

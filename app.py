@@ -1,103 +1,317 @@
 """
-Dashboard web pour imprimante(s) Bambu Lab.
+Bambu Control — serveur web pour imprimante(s) Bambu Lab.
 
 Usage :
     pip install -r requirements.txt
-    python3 setup_admin.py      # une seule fois
     python3 app.py
-Puis ouvre http://localhost:5000 (ou http://<IP-de-ce-PC>:5000 depuis un
-autre appareil du reseau local).
+Puis ouvre http://localhost:5000 (ou http://<IP-de-cette-machine>:5000) :
+au premier lancement, la page propose de créer le compte administrateur.
+
+Secours (mot de passe oublié) :
+    python3 app.py --reset-admin
 """
-from pathlib import Path
+import ipaddress
+import logging
+import re
+import sys
+import threading
+import time
+from datetime import timedelta
 
 from flask import (
-    Flask, jsonify, render_template, request, Response,
+    Flask, flash, get_flashed_messages, jsonify, render_template, request, Response,
     redirect, url_for, session
 )
+from werkzeug.utils import secure_filename
 
+import ai_client
+import ai_features
+import ai_monitor
+import ai_routes
+import appliance
+import auth
 import bambu_client as bc
+import commands
 import config
 import models
+import printer_check
 import printers_store as store
-from auth import verify_credentials, login_required
+import sd_card
+import settings_store
+from auth import login_required
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("app")
+
+settings_store.ensure_data_dir()
 
 app = Flask(__name__)
-app.secret_key = config.SECRET_KEY
+app.secret_key = settings_store.secret_key()
+app.config.update(
+    MAX_CONTENT_LENGTH=config.MAX_UPLOAD_MB * 1024 * 1024,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    PERMANENT_SESSION_LIFETIME=timedelta(days=config.SESSION_DAYS),
+    START_WORKERS=True,  # mis à False par les tests
+)
 
-ALLOWED_EXTENSIONS = {".gcode"}
+monitor = ai_monitor.AiMonitor(bc.manager)   # surveillance IA + automatisations
+_workers_started = False
+_workers_lock = threading.Lock()
 
-# Démarre tous les threads pour les imprimantes déjà enregistrées
-bc.manager.load_from_store(store.list_printers())
+
+def start_printer_workers():
+    """Démarre une seule fois les threads des imprimantes enregistrées."""
+    global _workers_started
+    with _workers_lock:
+        if _workers_started or not app.config["START_WORKERS"]:
+            return
+        _workers_started = True
+    bc.manager.load_from_store(store.list_printers())
+    monitor.start()
+
+
+@app.before_request
+def before_request():
+    start_printer_workers()
+    return auth.check_csrf()
+
+
+# Numéro de version des fichiers CSS/JS (date de la dernière modification) : après une mise à jour,
+# les navigateurs (dont le kiosk) rechargent les fichiers au lieu de garder l'ancienne version.
+ASSET_VERSION = str(int(max(p.stat().st_mtime for p in (config.BASE_DIR / "static").rglob("*") if p.is_file())))
+
+
+@app.context_processor
+def inject_globals():
+    """Variables disponibles dans tous les templates (barre d'état, navigation)."""
+    data = {"csrf_token": auth.csrf_token, "asset_version": ASSET_VERSION}
+    if session.get("logged_in"):
+        printers = [store.public_view(p) for p in store.list_printers()]
+        selected = _selected_printer_id() if printers else None
+        data.update(
+            username=session.get("username"),
+            nav_printers=printers,
+            selected_id=selected,
+            selected_printer=next((p for p in printers if p["id"] == selected), None),
+            model_labels={k: v["label"] for k, v in models.PRINTER_MODELS.items()},
+        )
+    return data
+
+
+@app.errorhandler(413)
+def too_large(_e):
+    return jsonify({"error": f"Fichier trop gros (maximum {config.MAX_UPLOAD_MB} Mo)."}), 413
 
 
 def _selected_printer_id():
-    """Détermine l'imprimante actuellement sélectionnée (session ou 1ère dispo)."""
+    """Imprimante sélectionnée (session) ou, à défaut, la première de la liste."""
     printers = store.list_printers()
     if not printers:
         return None
     pid = session.get("selected_printer")
     if pid and any(p["id"] == pid for p in printers):
         return pid
-    # par défaut, la première imprimante de la liste
     session["selected_printer"] = printers[0]["id"]
     return printers[0]["id"]
+
+
+def _printers_page(error=None, status=200):
+    return render_template(
+        "settings.html",
+        printers=[store.public_view(p) for p in store.list_printers()],
+        model_choices=models.model_choices(),
+        error=error,
+        messages=get_flashed_messages(with_categories=True),
+        port=settings_store.load()["port"],
+        startup=appliance.status(),
+        ai=ai_features.public_config(),
+        ai_providers=ai_client.PROVIDERS,
+    ), status
+
+
+def _log_in(username: str):
+    session.clear()  # nouvelle session : évite la fixation de session
+    session.permanent = True
+    session["logged_in"] = True
+    session["username"] = username
+
+
+HOSTNAME = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9-]{0,62})(\.[A-Za-z0-9]([A-Za-z0-9-]{0,62}))*$")
+
+
+def is_valid_host(value: str) -> bool:
+    """Adresse IP (192.168.1.20) ou nom réseau (a1.local)."""
+    try:
+        ipaddress.ip_address(value)
+        return True
+    except ValueError:
+        return len(value) <= 253 and bool(HOSTNAME.match(value))
+
+
+def _chamber_override_from_form(raw: str):
+    return {"yes": True, "no": False}.get(raw)  # "auto" → None
+
+
+# ── Premier lancement : création du compte ────────────────
+@app.route("/setup", methods=["GET", "POST"])
+def setup():
+    if auth.is_admin_configured():
+        return redirect(url_for("login"))
+    local = auth.is_local_request()
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        if not local and not auth.setup_code_ok(request.form.get("setup_code", "")):
+            error = "Code de configuration incorrect : il est affiché dans le terminal où tourne Bambu Control."
+        elif not username:
+            error = "Choisis un identifiant."
+        else:
+            error = auth.password_problem(password, request.form.get("password_confirm", ""))
+        if error is None:
+            auth.save_admin(username, password)
+            log.info("Compte administrateur « %s » créé depuis l'interface", username)
+            _log_in(username)
+            return redirect(url_for("settings_page"))
+    return render_template("setup.html", local=local, error=error), (400 if error else 200)
 
 
 # ── Authentification ──────────────────────────────────────
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    setup_needed = not auth.is_admin_configured()
+    if setup_needed:
+        return redirect(url_for("setup"))
     if request.method == "POST":
+        ip = request.remote_addr or "?"
+        if auth.is_login_locked(ip):
+            return render_template("login.html", setup_needed=False,
+                                   error="Trop de tentatives. Réessaie dans quelques minutes."), 429
         username = request.form.get("username", "")
         password = request.form.get("password", "")
-        if verify_credentials(username, password):
-            session["logged_in"] = True
-            session["username"] = username
-            next_url = request.args.get("next") or url_for("index")
-            return redirect(next_url)
-        return render_template("login.html", error="Identifiants incorrects.")
-    return render_template("login.html", error=None)
+        if auth.verify_credentials(username, password):
+            auth.reset_login_failures(ip)
+            _log_in(username)
+            return redirect(auth.safe_next_url(request.args.get("next")))
+        auth.record_login_failure(ip)
+        time.sleep(0.5)  # ralentit les essais en rafale
+        return render_template("login.html", setup_needed=False, error="Identifiants incorrects."), 401
+    return render_template("login.html", setup_needed=setup_needed, error=None)
 
 
-@app.route("/logout")
+@app.route("/logout", methods=["POST"])
 def logout():
     session.clear()
     return redirect(url_for("login"))
 
 
 # ── Pages ─────────────────────────────────────────────────
+def _console_page(template: str):
+    """Pages qui ont besoin d'une imprimante : sinon direction Paramètres pour en ajouter une."""
+    if not store.list_printers():
+        return redirect(url_for("settings_page"))
+    return render_template(template)
+
+
 @app.route("/")
 @login_required
 def index():
-    printers = store.list_printers()
-    if not printers:
-        return redirect(url_for("printers_page"))
-    selected = _selected_printer_id()
-    return render_template(
-        "index.html",
-        username=session.get("username"),
-        printers=printers,
-        selected_id=selected,
-    )
+    return _console_page("home.html")
+
+
+@app.route("/printer")
+@login_required
+def printer_page():
+    return _console_page("printer.html")
+
+
+@app.route("/prints")
+@login_required
+def prints_page():
+    return _console_page("prints.html")
+
+
+@app.route("/history")
+@login_required
+def history_page():
+    return _console_page("history.html")
+
+
+@app.route("/settings")
+@login_required
+def settings_page():
+    return _printers_page()
+
+
+@app.route("/settings/account", methods=["POST"])
+@login_required
+def settings_account():
+    """Changer l'identifiant et/ou le mot de passe (le mot de passe actuel est demandé)."""
+    current_user, _ = settings_store.admin_credentials()
+    if not auth.verify_credentials(current_user, request.form.get("current_password", "")):
+        flash("Mot de passe actuel incorrect : rien n'a été modifié.", "error")
+        return redirect(url_for("settings_page"))
+    username = request.form.get("username", "").strip() or current_user
+    new_password = request.form.get("new_password", "")
+    if new_password:
+        problem = auth.password_problem(new_password, request.form.get("new_password_confirm", ""))
+        if problem:
+            flash(problem, "error")
+            return redirect(url_for("settings_page"))
+    auth.save_admin(username, new_password or None)
+    session["username"] = username
+    flash("Compte mis à jour." if new_password else "Identifiant mis à jour.", "ok")
+    return redirect(url_for("settings_page"))
+
+
+@app.route("/settings/server", methods=["POST"])
+@login_required
+def settings_server():
+    raw = request.form.get("port", "").strip()
+    if not raw.isdigit() or not 1024 <= int(raw) <= 65535:
+        flash("Port invalide : choisis un nombre entre 1024 et 65535.", "error")
+        return redirect(url_for("settings_page"))
+    settings_store.save({"port": int(raw)})
+    if appliance.status()["kiosk_enabled"]:
+        appliance.enable_kiosk(int(raw))     # le plein écran doit ouvrir la nouvelle adresse
+    flash(f"Port {raw} enregistré : il sera utilisé au prochain démarrage de Bambu Control.", "ok")
+    return redirect(url_for("settings_page"))
+
+
+@app.route("/settings/startup", methods=["POST"])
+@login_required
+def settings_startup():
+    """Démarrage automatique et plein écran (Linux) : chaque case est appliquée telle quelle."""
+    current = appliance.status()
+    port = settings_store.load()["port"]
+    wanted_autostart = request.form.get("autostart") == "on"
+    wanted_kiosk = request.form.get("kiosk") == "on"
+    results = []
+    if current["can_autostart"] and wanted_autostart != current["autostart_enabled"]:
+        results.append(appliance.enable_autostart() if wanted_autostart else appliance.disable_autostart())
+    if current["can_kiosk"] and wanted_kiosk != current["kiosk_enabled"]:
+        results.append(appliance.enable_kiosk(port) if wanted_kiosk else appliance.disable_kiosk())
+    if not results:
+        flash("Aucun changement.", "ok")
+    for ok, message in results:
+        flash(message, "ok" if ok else "error")
+    return redirect(url_for("settings_page"))
 
 
 @app.route("/printers", methods=["GET"])
 @login_required
 def printers_page():
-    return render_template(
-        "printers.html",
-        username=session.get("username"),
-        printers=store.list_printers(),
-        model_choices=models.model_choices(),
-    )
+    return redirect(url_for("settings_page"))  # ancienne adresse
 
 
 @app.route("/printers/select", methods=["POST"])
 @login_required
 def printers_select():
     pid = request.form.get("printer_id")
-    if store.get_printer(pid):
+    if pid and store.get_printer(pid):
         session["selected_printer"] = pid
-    return redirect(url_for("index"))
+    return redirect(auth.safe_next_url(request.form.get("next")))
 
 
 @app.route("/printers/add", methods=["POST"])
@@ -108,26 +322,68 @@ def printers_add():
     ip = request.form.get("ip", "").strip()
     access_code = request.form.get("access_code", "").strip()
     serial = request.form.get("serial", "").strip()
-    chamber_override_raw = request.form.get("has_chamber_override", "auto")
 
     if not name or not ip or not access_code or not serial:
-        return render_template(
-            "printers.html", username=session.get("username"),
-            printers=store.list_printers(), model_choices=models.model_choices(),
-            error="Tous les champs (nom, IP, access code, numéro de série) sont requis.",
-        )
+        return _printers_page("Tous les champs (nom, IP, access code, numéro de série) sont requis.", 400)
+    if not is_valid_host(ip):
+        return _printers_page(f"Adresse IP invalide : « {ip} ».", 400)
+    if model not in models.PRINTER_MODELS:
+        model = "OTHER"
 
-    has_chamber_override = None
-    if chamber_override_raw == "yes":
-        has_chamber_override = True
-    elif chamber_override_raw == "no":
-        has_chamber_override = False
-
-    new_printer = store.add_printer(name, model, ip, access_code, serial,
-                                     has_chamber_override=has_chamber_override)
+    new_printer = store.add_printer(
+        name, model, ip, access_code, serial,
+        has_chamber_override=_chamber_override_from_form(request.form.get("has_chamber_override", "auto")),
+    )
     bc.manager.add_and_start(new_printer)
     session["selected_printer"] = new_printer["id"]
-    return redirect(url_for("printers_page"))
+    return redirect(url_for("settings_page"))
+
+
+@app.route("/printers/edit/<printer_id>", methods=["POST"])
+@login_required
+def printers_edit(printer_id):
+    if not store.get_printer(printer_id):
+        return _printers_page("Imprimante introuvable.", 404)
+    fields = {}
+    for key in ("name", "ip", "serial"):   # champ vide = on garde l'ancienne valeur
+        value = request.form.get(key, "").strip()
+        if value:
+            fields[key] = value
+    if "ip" in fields and not is_valid_host(fields["ip"]):
+        return _printers_page(f"Adresse IP invalide : « {fields['ip']} ».", 400)
+    access_code = request.form.get("access_code", "").strip()
+    if access_code:  # champ vide = on garde l'ancien code
+        fields["access_code"] = access_code
+    model = request.form.get("model")
+    if model in models.PRINTER_MODELS:
+        fields["model"] = model
+    if "has_chamber_override" in request.form:
+        fields["has_chamber_override"] = _chamber_override_from_form(request.form["has_chamber_override"])
+
+    updated = store.update_printer(printer_id, **fields)
+    bc.manager.restart(updated)
+    return redirect(url_for("settings_page"))
+
+
+@app.route("/api/printers/test", methods=["POST"])
+@login_required
+def api_printers_test():
+    """
+    Teste une connexion. Pour une imprimante existante (printer_id), les
+    champs laissés vides reprennent les valeurs enregistrées : l'access code
+    et le numéro de série ne repassent jamais par le navigateur.
+    """
+    body = request.get_json(silent=True) or {}
+    saved = store.get_printer(body.get("printer_id") or "") or {}
+    ip = (body.get("ip") or saved.get("ip") or "").strip()
+    access_code = (body.get("access_code") or saved.get("access_code") or "").strip()
+    serial = (body.get("serial") or saved.get("serial") or "").strip()
+    model = body.get("model") or saved.get("model") or "OTHER"
+    if not ip or not access_code or not serial:
+        return jsonify({"error": "IP, access code et numéro de série sont nécessaires pour le test."}), 400
+    if not is_valid_host(ip):
+        return jsonify({"error": f"Adresse IP invalide : « {ip} »."}), 400
+    return jsonify(printer_check.check_printer(ip, access_code, serial, model))
 
 
 @app.route("/printers/delete/<printer_id>", methods=["POST"])
@@ -137,189 +393,281 @@ def printers_delete(printer_id):
     store.delete_printer(printer_id)
     if session.get("selected_printer") == printer_id:
         session.pop("selected_printer", None)
-    return redirect(url_for("printers_page"))
+    return redirect(url_for("settings_page"))
 
 
-# ── API (toutes paramétrées par printer_id, via ?printer=... ou session) ──
+# ── API (paramétrée par ?printer=<id>, sinon l'imprimante sélectionnée) ──
 def _resolve_worker():
     pid = request.args.get("printer") or _selected_printer_id()
     return pid, bc.manager.get(pid) if pid else None
 
 
+def _no_printer():
+    return jsonify({"error": "Aucune imprimante sélectionnée"}), 400
+
+
+@app.route("/api/printers")
+@login_required
+def api_printers():
+    result = []
+    for p in store.list_printers():
+        worker = bc.manager.get(p["id"])
+        info = worker.connection_info() if worker else {"connection": bc.OFFLINE, "connected": False,
+                                                        "last_error": "Non démarrée"}
+        result.append({**store.public_view(p), **info})
+    return jsonify(result)
+
+
 @app.route("/api/status")
 @login_required
 def api_status():
-    pid, worker = _resolve_worker()
+    _, worker = _resolve_worker()
     if not worker:
-        return jsonify({"connected": False, "last_error": "Aucune imprimante sélectionnée", "data": {}})
-    with worker.lock:
-        connected = worker.connected
-        last_error = worker.last_error
-    return jsonify({
-        "connected": connected,
-        "last_error": last_error,
-        "data": worker.snapshot(),
-    })
+        return jsonify({"connected": False, "connection": bc.OFFLINE,
+                        "last_error": "Aucune imprimante sélectionnée", "data": {}})
+    pid, _ = _resolve_worker()
+    data = worker.snapshot()
+    data["ai"] = monitor.status(pid)
+    return jsonify({**worker.connection_info(), "data": data})
 
 
 @app.route("/api/camera.jpg")
 @login_required
 def api_camera():
-    pid, worker = _resolve_worker()
+    """Dernière image de la caméra. 503 + message clair si indisponible."""
+    _, worker = _resolve_worker()
     if not worker:
-        return "Aucune imprimante sélectionnée", 503
-    jpeg, ts = worker.get_camera()
+        return jsonify({"state": "unavailable", "message": "Aucune imprimante sélectionnée"}), 503
+    jpeg, frame_id = worker.get_camera()
     if jpeg is None:
-        return "Pas encore d'image", 503
-    return Response(jpeg, mimetype="image/jpeg")
+        return jsonify(worker.camera_status()), 503
+    return Response(jpeg, mimetype="image/jpeg",
+                    headers={"Cache-Control": "no-store", "X-Frame-Id": str(frame_id)})
+
+
+def _history_printer_filter():
+    """?printer=all → toutes les imprimantes ; sinon l'imprimante demandée/sélectionnée."""
+    pid = request.args.get("printer")
+    if pid == "all":
+        return None
+    return pid or _selected_printer_id()
+
+
+@app.route("/api/history/jobs")
+@login_required
+def api_history_jobs():
+    limit = request.args.get("limit", default=50, type=int)
+    return jsonify(bc.manager.history.jobs(_history_printer_filter(), limit))
+
+
+@app.route("/api/history/clear", methods=["POST"])
+@login_required
+def api_history_clear():
+    """{"printer": id | "all"} : efface impressions, courbes et erreurs (l'impression en cours est gardée)."""
+    pid = str((request.get_json(silent=True) or {}).get("printer") or "")
+    if pid != "all" and not store.get_printer(pid):
+        return jsonify({"error": "Imprimante inconnue."}), 400
+    counts, unused_photos = bc.manager.history.clear(None if pid == "all" else pid)
+    for name in unused_photos:
+        if re.fullmatch(r"[A-Za-z0-9_.-]+\.jpg", name):
+            (ai_monitor.PHOTOS_DIR / name).unlink(missing_ok=True)
+    who = "de toutes les imprimantes" if pid == "all" else f"de « {store.get_printer(pid)['name']} »"
+    log.info("Historique effacé %s : %s", who, counts)
+    return jsonify({"success": True, "counts": counts,
+                    "message": f"Historique {who} effacé : {counts['jobs']} impression(s), "
+                               f"{counts['errors']} erreur(s)."})
+
+
+@app.route("/api/history/errors")
+@login_required
+def api_history_errors():
+    limit = request.args.get("limit", default=50, type=int)
+    return jsonify(bc.manager.history.errors(_history_printer_filter(), limit))
+
+
+@app.route("/api/history/stats")
+@login_required
+def api_history_stats():
+    days = request.args.get("days", default=30, type=int)
+    return jsonify(bc.manager.history.stats(_history_printer_filter(), max(1, min(days, 365))))
+
+
+@app.route("/api/history/samples")
+@login_required
+def api_history_samples():
+    pid = request.args.get("printer") or _selected_printer_id()
+    if not pid or pid == "all":
+        return jsonify({"error": "Choisis une imprimante pour afficher les courbes."}), 400
+    job_id = request.args.get("job", type=int)
+    hours = request.args.get("hours", default=24, type=float)
+    return jsonify(bc.manager.history.samples(pid, job_id=job_id, hours=max(1, min(hours, 24 * 30))))
 
 
 @app.route("/api/history")
 @login_required
 def api_history():
-    pid, worker = _resolve_worker()
+    _, worker = _resolve_worker()
     if not worker:
         return jsonify([])
     limit = request.args.get("limit", default=200, type=int)
     return jsonify(worker.get_history(limit=limit))
 
 
+def _allowed_upload(filename: str) -> bool:
+    return filename.lower().endswith(config.ALLOWED_UPLOAD_SUFFIXES)
+
+
 @app.route("/api/upload", methods=["POST"])
 @login_required
 def api_upload():
-    pid, worker = _resolve_worker()
+    _, worker = _resolve_worker()
     if not worker:
-        return jsonify({"error": "Aucune imprimante sélectionnée"}), 400
+        return _no_printer()
 
-    if "file" not in request.files:
+    file = request.files.get("file")
+    if not file or not file.filename:
         return jsonify({"error": "Aucun fichier reçu"}), 400
 
-    file = request.files["file"]
-    if file.filename == "":
-        return jsonify({"error": "Nom de fichier vide"}), 400
+    filename = secure_filename(file.filename)  # supprime "../", "/" etc.
+    if not filename or not _allowed_upload(filename):
+        return jsonify({"error": "Format non supporté. Fichiers acceptés : .gcode.3mf, .3mf, .gcode "
+                                 "(nom en caractères simples)."}), 400
 
-    ext = Path(file.filename).suffix.lower()
-    if ext not in ALLOWED_EXTENSIONS:
-        return jsonify({
-            "error": f"Extension non supportée ({ext}). Seuls les fichiers .gcode sont acceptés."
-        }), 400
-
-    start_after_upload = request.form.get("start_print", default="false").lower() == "true"
-    plate_number = request.form.get("plate_number", default="1")
-    use_ams = request.form.get("use_ams", default="true").lower() == "true"
-
-    dest = bc.UPLOAD_DIR / file.filename
+    start_after_upload = request.form.get("start_print", "false").lower() == "true"
+    dest = bc.UPLOAD_DIR / filename
     file.save(dest)
-
     try:
-        remote_path, started = worker.upload_and_maybe_print(
-            dest, start_after_upload, plate_number=plate_number, use_ams=use_ams
-        )
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        remote_path = worker.upload(dest)
+    except RuntimeError as e:          # imprimante hors ligne
+        return jsonify({"error": f"Envoi impossible : {e}."}), 409
+    except sd_card.SdCardError as e:
+        log.warning("Upload échoué : %s", e)
+        return jsonify({"error": str(e)}), 502
+    finally:
+        dest.unlink(missing_ok=True)
 
+    response = {"success": True, "remote_path": remote_path, "filename": filename,
+                "message": f"{filename} envoyé sur la carte SD."}
     if start_after_upload:
-        message = "Fichier envoyé et impression lancée" if started else \
-                   "Fichier envoyé sur la carte SD, mais le lancement a échoué"
-    else:
-        message = "Fichier envoyé sur la carte SD."
+        params = {"filename": filename,
+                  "plate": request.form.get("plate_number", default=1, type=int) or 1,
+                  "use_ams": request.form.get("use_ams", "true").lower() == "true"}
+        refusal = _plate_check_refusal(worker)
+        if refusal:
+            response["print"] = {"status": commands.REJECTED, "message": refusal["message"], "success": False}
+            response["message"] += " Lancement annulé : " + refusal["message"] + \
+                " Lance-le depuis la liste « Sur la carte SD » une fois le plateau vidé."
+            return jsonify(response)
+        result = worker.execute("start", params)
+        response["print"] = result.to_json()
+        response["message"] += " " + result.message
+    return jsonify(response)
 
-    return jsonify({
-        "success": True,
-        "remote_path": remote_path,
-        "print_started": started,
-        "message": message,
-    })
+
+def _plate_check_refusal(worker) -> dict | None:
+    """
+    Vérification du plateau par l'IA avant un lancement (si activée).
+    Renvoie un refus {message, plate_check} si l'IA voit quelque chose sur le
+    plateau ; None sinon. Une IA indisponible ne bloque jamais l'impression.
+    """
+    try:
+        check = ai_monitor.check_plate_now(worker)
+    except ai_client.AiError as e:
+        log.warning("Vérification du plateau impossible : %s", e)
+        return None
+    if check and not check["clear"]:
+        return {"message": f"l'IA pense que le plateau n'est pas vide ({check['description']})",
+                "plate_check": check}
+    return None
 
 
-# ── Contrôle ──────────────────────────────────────────────
-@app.route("/api/control/light", methods=["POST"])
+# ── Fichiers de la carte SD ───────────────────────────────
+@app.route("/api/files")
 @login_required
-def control_light():
-    pid, worker = _resolve_worker()
+def api_files():
+    _, worker = _resolve_worker()
     if not worker:
-        return jsonify({"error": "Aucune imprimante sélectionnée"}), 400
-    on = (request.get_json(silent=True, force=True) or {}).get("on", True)
+        return _no_printer()
     try:
-        ok = worker.set_light(bool(on))
-        return jsonify({"success": ok})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"files": worker.list_sd_files()})
+    except RuntimeError as e:
+        return jsonify({"error": f"{e} : la carte SD n'est pas accessible."}), 409
+    except sd_card.SdCardError as e:
+        return jsonify({"error": str(e)}), 502
 
 
-@app.route("/api/control/temperature", methods=["POST"])
+@app.route("/api/files/delete", methods=["POST"])
 @login_required
-def control_temperature():
-    pid, worker = _resolve_worker()
+def api_files_delete():
+    _, worker = _resolve_worker()
     if not worker:
-        return jsonify({"error": "Aucune imprimante sélectionnée"}), 400
-    part = (request.get_json(silent=True, force=True) or {}).get("part")
-    value = (request.get_json(silent=True, force=True) or {}).get("value")
+        return _no_printer()
+    name = str((request.get_json(silent=True) or {}).get("name") or "")
+    if not sd_card.is_safe_name(name):
+        return jsonify({"error": "Nom de fichier invalide."}), 400
     try:
-        value = int(value)
-    except (TypeError, ValueError):
-        return jsonify({"error": "Valeur de température invalide"}), 400
-
-    try:
-        if part == "nozzle":
-            if value < 0 or value > 320:
-                return jsonify({"error": "Température buse hors limites (0-320°C)"}), 400
-            ok = worker.set_nozzle_temperature(value)
-        elif part == "bed":
-            if value < 0 or value > 120:
-                return jsonify({"error": "Température plateau hors limites (0-120°C)"}), 400
-            ok = worker.set_bed_temperature(value)
-        else:
-            return jsonify({
-                "error": "La température de chambre ne peut pas être réglée : "
-                         "l'imprimante/la librairie n'expose aucune commande "
-                         "fiable pour ça (lecture seule)."
-            }), 400
-        return jsonify({"success": ok})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        worker.delete_sd_file(name)
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 409
+    except sd_card.SdCardError as e:
+        return jsonify({"error": str(e)}), 502
+    log.info("Fichier supprimé de la carte SD : %s", name)
+    return jsonify({"success": True, "message": f"{name} supprimé de la carte SD."})
 
 
-@app.route("/api/control/speed", methods=["POST"])
+# ── Commandes ─────────────────────────────────────────────
+@app.route("/api/command/<name>", methods=["POST"])
 @login_required
-def control_speed():
-    pid, worker = _resolve_worker()
+def api_command(name):
+    """
+    Exécute une commande (pause, resume, stop, light, nozzle_temp, bed_temp,
+    speed, fan, start) et attend la confirmation de l'imprimante.
+    Réponse : {"status": confirmed|unconfirmed|rejected|error, "message": ...}
+    """
+    if name not in commands.COMMANDS:
+        return jsonify({"status": commands.REJECTED, "message": "Commande inconnue"}), 404
+    _, worker = _resolve_worker()
     if not worker:
-        return jsonify({"error": "Aucune imprimante sélectionnée"}), 400
-    level = (request.get_json(silent=True, force=True) or {}).get("level")
+        return _no_printer()
     try:
-        level = int(level)
-        if level not in (1, 2, 3, 4):
-            raise ValueError
-    except (TypeError, ValueError):
-        return jsonify({"error": "Niveau de vitesse invalide (1 à 4 attendu)"}), 400
-    try:
-        ok = worker.set_speed_level(level)
-        return jsonify({"success": ok})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        params = commands.COMMANDS[name].parse(request.get_json(silent=True) or {})
+    except ValueError as e:
+        return jsonify({"status": commands.REJECTED, "message": str(e)}), 400
+    if name == "fan" and params["fan"] not in worker.fans:
+        return jsonify({"status": commands.REJECTED,
+                        "message": "Ce modèle n'a pas ce ventilateur."}), 400
+    if name == "start" and not (request.get_json(silent=True) or {}).get("force"):
+        refusal = _plate_check_refusal(worker)
+        if refusal:
+            return jsonify({"status": commands.REJECTED, "success": False, "plate_check": refusal["plate_check"],
+                            "message": f"Lancement suspendu : {refusal['message']}."}), 409
+    result = worker.execute(name, params)
+    return jsonify(result.to_json()), result.http_code
 
 
-@app.route("/api/control/fan", methods=["POST"])
-@login_required
-def control_fan():
-    pid, worker = _resolve_worker()
-    if not worker:
-        return jsonify({"error": "Aucune imprimante sélectionnée"}), 400
-    fan = (request.get_json(silent=True, force=True) or {}).get("fan")
-    percent = (request.get_json(silent=True, force=True) or {}).get("percent")
+app.register_blueprint(ai_routes.create_blueprint(_resolve_worker, monitor))
+
+
+def main():
+    if "--reset-admin" in sys.argv:
+        auth.reset_admin()
+        print("Compte administrateur supprimé. Relance Bambu Control puis ouvre la page web "
+              "pour en créer un nouveau (tes imprimantes et ton historique sont conservés).")
+        return
+    settings = settings_store.load()
+    host, port = settings["host"], int(settings["port"])
+    if not auth.is_admin_configured():
+        log.warning("Premier lancement : ouvre http://localhost:%s pour créer le compte administrateur.", port)
+        log.warning("Depuis un autre appareil du réseau, le code demandé est : %s", auth.SETUP_CODE)
+    start_printer_workers()
     try:
-        percent = float(percent)
-    except (TypeError, ValueError):
-        return jsonify({"error": "Pourcentage invalide"}), 400
-    if fan not in ("part", "aux", "chamber"):
-        return jsonify({"error": "Ventilateur inconnu"}), 400
-    try:
-        ok = worker.set_fan(fan, percent)
-        return jsonify({"success": ok})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        from waitress import serve
+        log.info("Bambu Control démarré sur http://%s:%s (waitress)", host, port)
+        serve(app, host=host, port=port, threads=8)
+    except ImportError:
+        log.info("waitress absent : serveur de développement Flask utilisé")
+        app.run(host=host, port=port, debug=False, threaded=True)
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    main()

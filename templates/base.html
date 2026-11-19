@@ -1,0 +1,122 @@
+{% from "_icons.html" import icon %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <meta name="theme-color" content="#0d1013">
+  <title>{% block title %}Bambu Control{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/console.css', v=asset_version) }}">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/BambuLab.png') }}">
+</head>
+<body>
+  {% set nav_items = [
+    ("index", "home", "Accueil"),
+    ("printer_page", "printer", "Imprimante"),
+    ("prints_page", "prints", "Impressions"),
+    ("history_page", "history", "Historique"),
+    ("settings_page", "settings", "Paramètres"),
+  ] %}
+  <div class="shell">
+    <nav class="rail" aria-label="Navigation principale">
+      <div class="rail-brand" title="Bambu Control"><span>BC</span></div>
+      <div class="nav">
+        {% for endpoint, icon_name, label in nav_items %}
+        <a href="{{ url_for(endpoint) }}" class="{{ 'active' if request.endpoint == endpoint }}"
+           {% if request.endpoint == endpoint %}aria-current="page"{% endif %}>{{ icon(icon_name) }}<span>{{ label }}</span></a>
+        {% endfor %}
+      </div>
+      <form method="POST" action="{{ url_for('logout') }}" class="rail-logout">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" title="Se déconnecter ({{ username }})">{{ icon("logout") }}<span>Quitter</span></button>
+      </form>
+    </nav>
+
+    <div class="main">
+      <header class="statusbar">
+        <div class="statusbar-printer">
+          {% if nav_printers|length > 1 %}
+          <form method="POST" action="{{ url_for('printers_select') }}" class="statusbar-switch">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="next" value="{{ request.path }}">
+            <select name="printer_id" aria-label="Imprimante active" onchange="this.form.submit()">
+              {% for p in nav_printers %}
+              <option value="{{ p.id }}" {% if p.id == selected_id %}selected{% endif %}>{{ p.name }}</option>
+              {% endfor %}
+            </select>
+          </form>
+          {% elif selected_printer %}
+          <strong>{{ selected_printer.name }}</strong>
+          {% else %}
+          <strong>Bambu Control</strong>
+          {% endif %}
+          {% if selected_printer %}<span class="model">{{ model_labels.get(selected_printer.model, selected_printer.model) }}</span>{% endif %}
+        </div>
+        <div class="statusbar-spacer"></div>
+        {% if selected_printer %}
+        <div class="conn connecting" id="conn" title="">
+          <span class="conn-dot"></span><span id="conn-label">Connexion</span>
+        </div>
+        {% endif %}
+        <button type="button" class="assistant-btn" id="assistant-open" title="Assistant et alertes">
+          {{ icon("assistant") }}<span>Assistant</span><span class="badge" id="assistant-badge" hidden>0</span>
+        </button>
+        <div class="clock" id="clock">--:--</div>
+      </header>
+
+      <main class="content" id="content">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+
+  <aside class="drawer" id="drawer" aria-label="Assistant et alertes" hidden>
+    <div class="drawer-head">
+      <div class="tabs" role="tablist">
+        <button type="button" class="tab active" data-tab="chat" role="tab">Assistant</button>
+        <button type="button" class="tab" data-tab="events" role="tab">Alertes <span class="badge" id="events-badge" hidden>0</span></button>
+      </div>
+      <button type="button" class="icon-btn" id="drawer-close" title="Fermer">{{ icon("close") }}</button>
+    </div>
+    <div class="drawer-body" data-panel="chat">
+      <div class="drawer-tools">
+        <button type="button" class="btn btn-small btn-danger" id="chat-clear">Effacer la discussion</button>
+      </div>
+      <div class="chat" id="chat"></div>
+      <form class="chat-form" id="chat-form">
+        <input class="input" id="chat-input" autocomplete="off" placeholder="Pose une question à l'assistant…">
+        <button type="submit" class="btn btn-primary" title="Envoyer">{{ icon("send") }}</button>
+      </form>
+    </div>
+    <div class="drawer-body" data-panel="events" hidden>
+      <div class="events-tools">
+        <button type="button" class="btn btn-small" id="watch-now">Contrôler maintenant</button>
+        <button type="button" class="btn btn-small btn-danger" id="events-clear">Tout effacer</button>
+        <label class="check events-filter"><input type="checkbox" id="events-hide-ok">
+          <span>Masquer les contrôles sans problème</span></label>
+      </div>
+      <div class="events" id="events"><div class="muted">Chargement…</div></div>
+    </div>
+  </aside>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <dialog class="dialog" id="confirm-dialog">
+    <form method="dialog">
+      <div class="dialog-body">
+        <h2 id="confirm-title">Confirmer</h2>
+        <p id="confirm-message"></p>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn" value="cancel">Annuler</button>
+        <button class="btn btn-danger-solid" value="ok" id="confirm-ok">Confirmer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="{{ url_for('static', filename='js/common.js', v=asset_version) }}"></script>
+  <script src="{{ url_for('static', filename='js/assistant.js', v=asset_version) }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

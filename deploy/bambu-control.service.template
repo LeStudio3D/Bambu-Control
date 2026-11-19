@@ -1,0 +1,20 @@
+# Service systemd « utilisateur » de Bambu Control (créé depuis Paramètres → Démarrage).
+# Installé dans ~/.config/systemd/user/bambu-control.service — aucun droit administrateur requis.
+#
+#   systemctl --user status bambu-control      # état
+#   journalctl --user -u bambu-control -f      # journaux en direct
+#   systemctl --user restart bambu-control     # redémarrer
+
+[Unit]
+Description=Bambu Control (console imprimantes Bambu Lab)
+
+[Service]
+Type=simple
+WorkingDirectory={workdir}
+ExecStart={python} {workdir}/app.py
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

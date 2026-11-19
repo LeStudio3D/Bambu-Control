@@ -1,0 +1,5 @@
+# Scripts et fichiers systemd : toujours en fins de ligne Linux, même si édités sous Windows
+*.sh text eol=lf
+*.template text eol=lf
+*.service text eol=lf
+*.desktop text eol=lf
