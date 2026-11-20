@@ -10,6 +10,10 @@ Les bobines Bambu Lab à puce donnent aussi leur niveau (%) via l'AMS : le
 stock reste utile pour toutes les autres marques, dont l'imprimante ne
 connaît pas le niveau.
 """
+# Annotations lues plus tard : la méthode list() ci-dessous masque le type
+# list[...] sur Python 3.13 et plus ancien (le Pi) et ferait planter l'import.
+from __future__ import annotations
+
 from datetime import datetime
 
 EXTERNAL_SLOT = "EXT"
