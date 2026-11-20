@@ -23,8 +23,12 @@
           <label for="setup_code">Code de configuration</label>
           <input type="text" id="setup_code" name="setup_code" autocomplete="off" autocapitalize="characters"
                  maxlength="6" required autofocus class="mono">
-          <span class="hint" style="margin: 0">Affiché dans le terminal où tourne Bambu Control. Il évite qu'un
-            autre appareil du réseau crée le compte à ta place.</span>
+          <span class="hint" style="margin: 0">Il évite qu'un autre appareil du réseau crée le compte à ta
+            place. Il est affiché à la fin de l'installation et dans le terminal où tourne Bambu Control.
+            Pour le retrouver, tape sur la machine de Bambu Control :
+            <code class="mono" style="word-break: break-all">cat {{ code_file }}</code><br>
+            Ou ouvre cette page directement sur cette machine (<code class="mono">http://localhost</code>) :
+            aucun code n'est demandé.</span>
         </div>
         {% endif %}
         <div class="field">

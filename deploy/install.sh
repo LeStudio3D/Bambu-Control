@@ -126,6 +126,14 @@ cat <<EOF
    puis d'ajouter ton imprimante (IP, code d'accès, numéro de série).
 
 EOF
+CODE_FILE="$DIR/data/setup_code.txt"
+if [ "$RUNNING" = 1 ] && [ -s "$CODE_FILE" ]; then
+  cat <<EOF
+   🔑 Code de configuration (demandé seulement depuis un autre appareil) : $(cat "$CODE_FILE")
+      Il change à chaque redémarrage de Bambu Control. Pour le revoir : cat $CODE_FILE
+
+EOF
+fi
 if [ "$AUTOSTART" = 1 ]; then
   cat <<EOF
    Démarrage automatique : oui (Bambu Control redémarre tout seul avec le Pi).

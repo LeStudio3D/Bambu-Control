@@ -27,7 +27,26 @@ CSRF_FIELD = "csrf_token"
 # Depuis la machine elle-même (écran du Pi en kiosk) c'est autorisé directement ;
 # depuis un autre appareil, il faut ce code, affiché dans le terminal du serveur.
 SETUP_CODE = "".join(secrets.choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(6))
+# Copie du code dans un fichier, lisible seulement par l'utilisateur du Pi : quand Bambu
+# Control tourne en service ou en arrière-plan, il n'y a pas de terminal où le lire.
+SETUP_CODE_FILE = config.DATA_DIR / "setup_code.txt"
 MIN_PASSWORD_LENGTH = 8
+
+
+def publish_setup_code():
+    try:
+        SETUP_CODE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        SETUP_CODE_FILE.write_text(SETUP_CODE + "\n", encoding="utf-8")
+        SETUP_CODE_FILE.chmod(0o600)
+    except OSError:
+        pass  # le code reste affiché dans le journal
+
+
+def clear_setup_code():
+    try:
+        SETUP_CODE_FILE.unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def is_local_request() -> bool:
@@ -53,6 +72,8 @@ def save_admin(username: str, password: str | None = None):
     if password is not None:
         updates["admin_password_hash"] = generate_password_hash(password)
     settings_store.save(updates)
+    if password is not None:
+        clear_setup_code()  # le compte existe : le code ne sert plus
 
 
 def reset_admin():

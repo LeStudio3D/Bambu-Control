@@ -171,7 +171,7 @@ def setup():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
         if not local and not auth.setup_code_ok(request.form.get("setup_code", "")):
-            error = "Code de configuration incorrect : il est affiché dans le terminal où tourne Bambu Control."
+            error = "Code de configuration incorrect (voir ci-dessous comment le retrouver)."
         elif not username:
             error = "Choisis un identifiant."
         else:
@@ -181,7 +181,8 @@ def setup():
             log.info("Compte administrateur « %s » créé depuis l'interface", username)
             _log_in(username)
             return redirect(url_for("settings_page"))
-    return render_template("setup.html", local=local, error=error), (400 if error else 200)
+    return render_template("setup.html", local=local, error=error,
+                           code_file=auth.SETUP_CODE_FILE), (400 if error else 200)
 
 
 # ── Authentification ──────────────────────────────────────
@@ -686,6 +687,9 @@ def main():
     if not auth.is_admin_configured():
         log.warning("Premier lancement : ouvre http://localhost:%s pour créer le compte administrateur.", port)
         log.warning("Depuis un autre appareil du réseau, le code demandé est : %s", auth.SETUP_CODE)
+        auth.publish_setup_code()
+    else:
+        auth.clear_setup_code()
     start_printer_workers()
     try:
         from waitress import serve
