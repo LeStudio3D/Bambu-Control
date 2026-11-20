@@ -138,6 +138,14 @@
   {{ forms.ai_form() }}
 </section>
 
+<section class="surface" id="backup" style="margin-top: var(--gap)">
+  <div class="section">
+    <div class="section-head"><span class="label">Sauvegarde (export / import)</span>
+      <a class="link-button" href="{{ url_for('welcome', step='printers') }}#import">Importer une sauvegarde</a></div>
+    {{ forms.export_form() }}
+  </div>
+</section>
+
 <p class="hint" style="text-align: center; margin-top: var(--gap)">
   <a class="link-button" href="{{ url_for('welcome') }}">Relancer l'assistant de configuration</a></p>
 {% endblock %}

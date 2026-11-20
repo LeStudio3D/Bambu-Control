@@ -231,3 +231,42 @@
   </div>
 </form>
 {% endmacro %}
+
+{# ── Sauvegarde : export (Paramètres) ── #}
+{% macro export_form() %}
+<form method="POST" action="{{ url_for('settings_export') }}" data-busy="Préparation de la sauvegarde…">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <p class="hint" style="margin-top: 0">Un seul fichier avec <strong>tout</strong> : imprimantes (access codes et
+    numéros de série compris), serveur, coûts, IA, automatisations, bobines, historique, photos et timelapses.
+    Il est <strong>chiffré</strong> avec le mot de passe choisi ici : sans lui, personne ne peut le lire, et
+    il te sera demandé pour l'importer (assistant de configuration). Le compte de connexion n'est pas inclus.</p>
+  <div class="form-grid">
+    <div class="field"><label for="backup-password">Mot de passe de la sauvegarde</label>
+      <input type="password" id="backup-password" name="backup_password" autocomplete="new-password" minlength="8" required></div>
+    <div class="field"><label for="backup-password-confirm">Confirmation</label>
+      <input type="password" id="backup-password-confirm" name="backup_password_confirm" autocomplete="new-password" minlength="8" required></div>
+  </div>
+  <button type="submit" class="btn btn-primary">Exporter la sauvegarde</button>
+  <p class="hint">Avec beaucoup de timelapses, la préparation peut prendre une à deux minutes. Note bien le mot de
+    passe : il est impossible de le retrouver.</p>
+</form>
+{% endmacro %}
+
+{# ── Sauvegarde : import (assistant) ── #}
+{% macro import_form(replace_warning=False) %}
+<form method="POST" action="{{ url_for('settings_import') }}" enctype="multipart/form-data"
+      data-busy="Import en cours, ne ferme pas la page…">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="form-grid">
+    <div class="field"><label for="backup-file">Fichier de sauvegarde (.bcbackup)</label>
+      <input type="file" id="backup-file" name="backup_file" accept=".bcbackup" required></div>
+    <div class="field"><label for="backup-import-password">Mot de passe de la sauvegarde</label>
+      <input type="password" id="backup-import-password" name="backup_password" autocomplete="off" required></div>
+  </div>
+  {% if replace_warning %}
+  <label class="check" style="margin-bottom: 12px"><input type="checkbox" name="confirm_replace" required>
+    Remplacer les réglages actuels (imprimantes, historique, bobines…) par ceux de la sauvegarde</label>
+  {% endif %}
+  <button type="submit" class="btn btn-primary">Importer</button>
+</form>
+{% endmacro %}

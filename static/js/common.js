@@ -235,3 +235,15 @@ const BC = (() => {
     isBusy: () => commandBusy,
   };
 })();
+
+// Formulaires longs (sauvegarde) : bouton désactivé et message d'attente pendant l'envoi.
+// Pour l'export, la page ne change pas (téléchargement) : le bouton revient après 3 minutes au plus.
+document.addEventListener("submit", e => {
+  const form = e.target;
+  if (!(form instanceof HTMLFormElement) || !form.dataset.busy || e.defaultPrevented) return;
+  const button = form.querySelector('button[type="submit"]');
+  if (!button) return;
+  const label = button.textContent;
+  setTimeout(() => { button.disabled = true; button.textContent = form.dataset.busy; }, 0);
+  setTimeout(() => { button.disabled = false; button.textContent = label; }, form.enctype === "multipart/form-data" ? 600000 : 180000);
+});

@@ -13,6 +13,9 @@ Secours (mot de passe oublié) :
 import ipaddress
 import logging
 import re
+import shutil
+import tempfile
+from pathlib import Path
 import sys
 import threading
 import time
@@ -20,7 +23,7 @@ from datetime import timedelta
 
 from flask import (
     Flask, flash, get_flashed_messages, jsonify, render_template, request, Response,
-    redirect, url_for, session
+    redirect, send_file, url_for, session
 )
 from werkzeug.utils import secure_filename
 
@@ -30,6 +33,7 @@ import ai_monitor
 import ai_routes
 import appliance
 import auth
+import backup
 import bambu_client as bc
 import commands
 import config
@@ -37,6 +41,7 @@ import extras_routes
 import job_extras
 import models
 import printer_check
+import print_queue
 import printers_store as store
 import sd_card
 import settings_store
@@ -328,6 +333,84 @@ def settings_account():
     session["username"] = username
     flash("Compte mis à jour." if new_password else "Identifiant mis à jour.", "ok")
     return redirect(url_for("settings_page"))
+
+
+# ── Sauvegarde complète : export (Paramètres) et import (assistant) ──
+IMPORT_MAX_BYTES = 8 * 1024 ** 3   # l'historique avec les timelapses peut être gros
+
+
+@app.route("/settings/export", methods=["POST"])
+@login_required
+def settings_export():
+    password = request.form.get("backup_password", "")
+    if password != request.form.get("backup_password_confirm", ""):
+        flash("Les deux mots de passe de la sauvegarde ne correspondent pas.", "error")
+        return redirect(url_for("settings_page") + "#backup")
+    try:
+        path = backup.build_export(bc.manager.history, password)
+    except backup.BackupError as e:
+        flash(str(e), "error")
+        return redirect(url_for("settings_page") + "#backup")
+    log.info("Sauvegarde exportée (%s Mo)", round(path.stat().st_size / 1024 ** 2, 1))
+    response = send_file(path, as_attachment=True, download_name=path.name,
+                         mimetype="application/octet-stream", max_age=0)
+    response.call_on_close(lambda: shutil.rmtree(path.parent, ignore_errors=True))
+    return response
+
+
+@app.route("/settings/import", methods=["POST"])
+@login_required
+def settings_import():
+    """Remplace réglages, imprimantes, historique, bobines et médias par ceux de la sauvegarde."""
+    request.max_content_length = IMPORT_MAX_BYTES
+    back = url_for("welcome", step="printers")
+    upload = request.files.get("backup_file")
+    if not upload or not upload.filename:
+        flash("Choisis le fichier de sauvegarde (.bcbackup).", "error")
+        return redirect(back)
+    if store.list_printers() and request.form.get("confirm_replace") != "on":
+        flash("Coche la case pour confirmer le remplacement des réglages actuels.", "error")
+        return redirect(back)
+    work = Path(tempfile.mkdtemp(prefix="bc-import-", dir=config.DATA_DIR))
+    try:
+        encrypted = work / "upload.bcbackup"
+        upload.save(encrypted)
+        data = backup.read_backup(encrypted, request.form.get("backup_password", ""), work)
+        encrypted.unlink()
+        old_port = settings_store.load()["port"]
+
+        for printer_id in bc.manager.list_ids():   # plus personne n'écrit pendant le remplacement
+            bc.manager.remove(printer_id)
+        settings_store.save(data["settings"])
+        store.replace_all(data["printers"])
+        if data["queue"] is not None:
+            print_queue.replace_all(data["queue"])
+        if data["db_path"]:
+            backup.restore_database(bc.manager.history, data["db_path"])
+            bc.manager.history.ensure_schema()      # sauvegarde d'une version plus ancienne
+            spools.SpoolStore.ensure_table(bc.manager.history)
+        backup.restore_media(data["media_dir"])
+        bc.manager.load_from_store(store.list_printers())
+        session.pop("selected_printer", None)
+
+        new_port = settings_store.load()["port"]
+        if appliance.status()["kiosk_enabled"]:
+            appliance.enable_kiosk(int(new_port))
+        names = ", ".join(p["name"] for p in data["printers"]) or "aucune"
+        flash(f"Sauvegarde importée : imprimantes ({names}), réglages, historique, bobines et "
+              f"{data['media_count']} photo(s) / vidéo(s). Vérifie chaque étape puis clique sur Suivant.", "ok")
+        if new_port != old_port:
+            flash(f"La sauvegarde utilise le port {new_port} : il s'appliquera au prochain démarrage "
+                  f"de Bambu Control (en attendant, l'adresse reste :{old_port}).", "ok")
+        log.info("Sauvegarde importée (%d imprimante(s))", len(data["printers"]))
+    except backup.BackupError as e:
+        flash(str(e), "error")
+    except Exception:
+        log.exception("Import de sauvegarde impossible")
+        flash("Import impossible : erreur inattendue (détails dans le journal de Bambu Control).", "error")
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+    return redirect(back)
 
 
 @app.route("/settings/server", methods=["POST"])

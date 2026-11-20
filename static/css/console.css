@@ -609,3 +609,7 @@ input[type=time].input-inline { width: 104px; }
   .wizard-step:not(.current) .wizard-label { display: none; }
   .wizard-step { padding: 6px; }
 }
+.wizard-import summary { cursor: pointer; display: flex; flex-direction: column; gap: 4px; list-style: none; }
+.wizard-import summary::-webkit-details-marker { display: none; }
+.wizard-import summary strong::before { content: "▸ "; color: var(--accent); }
+.wizard-import[open] summary strong::before { content: "▾ "; }

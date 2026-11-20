@@ -20,6 +20,12 @@ def _read() -> dict:
         return json.load(f)
 
 
+def replace_all(data: dict):
+    """Import d'une sauvegarde : remplace toute la file d'attente."""
+    if isinstance(data, dict):
+        _write(data)
+
+
 def _write(data: dict):
     QUEUE_PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp = QUEUE_PATH.with_suffix(".tmp")

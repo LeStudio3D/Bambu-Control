@@ -76,6 +76,9 @@ class SpoolStore:
                 )""")
             db.conn.commit()
 
+
+    ensure_table = _create_table   # après l'import d'une sauvegarde
+
     def _rows(self, sql, params=()):
         return self.db._rows(sql, params)
 

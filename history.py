@@ -76,6 +76,10 @@ class HistoryDB:
         self._last_purge = 0.0
 
     # ── Schéma et migrations ──
+    def ensure_schema(self):
+        """Après l'import d'une sauvegarde plus ancienne : ajoute ce qui manque."""
+        self._create_schema()
+
     def _create_schema(self):
         with self.lock:
             self.conn.executescript("""

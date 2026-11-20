@@ -29,6 +29,12 @@ def _write_all(printers: list):
     os.replace(tmp, config.PRINTERS_PATH)  # écriture atomique : jamais de fichier à moitié écrit
 
 
+def replace_all(printers: list):
+    """Import d'une sauvegarde : remplace toute la liste."""
+    with _lock:
+        _write_all(printers)
+
+
 def public_view(printer: dict) -> dict:
     """Version sans secrets (access code, n° de série) pour les templates / l'API."""
     return {

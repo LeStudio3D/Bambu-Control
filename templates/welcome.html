@@ -21,7 +21,17 @@
 
   {# ── 1. Imprimantes ── #}
   {% if step == "printers" %}
-  <section class="surface"><div class="section">
+  <details class="surface wizard-import" id="import" {% if not printers %}open{% endif %}>
+    <summary class="section"><strong>Tu as une sauvegarde de Bambu Control ?</strong>
+      <span class="muted">Importe-la : imprimantes, réglages, IA, bobines, historique, photos et timelapses
+        reviennent d'un coup.</span></summary>
+    <div class="section" style="padding-top: 0">
+      {{ forms.import_form(replace_warning=printers|length > 0) }}
+      <p class="hint">La sauvegarde se crée dans <strong>Paramètres → Sauvegarde</strong> d'une autre installation.
+        Ton compte de connexion actuel est gardé.</p>
+    </div>
+  </details>
+  <section class="surface" style="margin-top: var(--gap)"><div class="section">
     <h1 class="wizard-title">Tes imprimantes</h1>
     <p class="muted">Ajoute une première imprimante, puis d'autres si tu en as plusieurs. Les informations
       se trouvent sur l'écran de l'imprimante : <strong>Paramètres → Réseau</strong> (adresse IP, access code)
@@ -128,6 +138,10 @@
 {% endblock %}
 
 {% block scripts %}
+<script>
+  // Lien « Importer une sauvegarde » depuis Paramètres : ouvre directement le bloc d'import.
+  if (location.hash === "#import") { const box = document.getElementById("import"); if (box) box.open = true; }
+</script>
 {% if step in ("printers", "ai") %}
 <script src="{{ url_for('static', filename='js/settings.js', v=asset_version) }}"></script>
 {% elif step == "filament" %}

@@ -321,6 +321,22 @@ monté en lecteur réseau) et lancé depuis un PC. Deux règles :
 - Les écritures dans la base sont plus lentes sur un partage réseau (sans
   conséquence ici : au plus une toutes les 30 secondes).
 
+## Sauvegarde : exporter et importer tous les réglages
+
+- **Exporter** : **Paramètres → Sauvegarde**. Choisis un mot de passe : Bambu
+  Control télécharge un fichier `.bcbackup` avec **tout** : imprimantes (access
+  codes et numéros de série compris), serveur, coûts, IA, automatisations,
+  bobines, file d'attente, historique, photos et timelapses.
+- **Importer** : dans l'**assistant de configuration** (juste après la création
+  du compte sur une nouvelle installation, ou *Paramètres → Importer une
+  sauvegarde*). Donne le fichier et son mot de passe : tout revient d'un coup.
+  Le compte de connexion de la machine est gardé.
+
+Le fichier est **chiffré** (AES-256-GCM, clé tirée du mot de passe par scrypt) :
+sans le mot de passe, personne ne peut lire les access codes ni les clés d'IA,
+et un fichier modifié ou mal copié est refusé. **Le mot de passe ne peut pas
+être retrouvé** : note-le.
+
 ## Données et mise à jour
 
 | Fichier | Contenu |
