@@ -43,11 +43,29 @@ terminal et colle :
 curl -fsSL https://raw.githubusercontent.com/LeStudio3D/Bambu-Control/main/deploy/install.sh | bash
 ```
 
-Le script installe tout (Python, ffmpeg pour les timelapses, Chromium),
-télécharge Bambu Control dans `~/Bambu-Control`, active le démarrage
-automatique et le plein écran. Redémarre le Pi : la console s'ouvre toute
-seule. **Pour mettre à jour plus tard, relance la même commande** (tes réglages
-ne sont pas touchés).
+Le script pose deux questions (Entrée = oui) :
+
+- **démarrer Bambu Control automatiquement** avec le Pi ;
+- **ouvrir la console en plein écran (kiosk)** sur l'écran du Pi.
+
+Puis il installe tout (Python, ffmpeg pour les timelapses, Chromium si le
+plein écran est choisi) et télécharge Bambu Control dans `~/Bambu-Control`.
+**Pour mettre à jour ou changer d'avis, relance la même commande** (tes
+réglages ne sont pas touchés). Ces deux choix se changent aussi dans
+**Paramètres → Démarrage**.
+
+Répondre d'avance, sans questions (ex. ni démarrage automatique ni plein écran) :
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/LeStudio3D/Bambu-Control/main/deploy/install.sh | BAMBU_AUTOSTART=non BAMBU_KIOSK=non bash
+```
+
+**Désinstaller** (une question demande s'il faut garder tes réglages et ton
+historique) :
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/LeStudio3D/Bambu-Control/main/deploy/uninstall.sh | bash
+```
 
 ## Installation manuelle (Linux, Windows, macOS)
 

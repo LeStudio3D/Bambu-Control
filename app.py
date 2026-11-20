@@ -666,12 +666,19 @@ def main():
         print("Compte administrateur supprimé. Relance Bambu Control puis ouvre la page web "
               "pour en créer un nouveau (tes imprimantes et ton historique sont conservés).")
         return
-    if "--install" in sys.argv:
-        # Utilisé par deploy/install.sh : démarrage automatique + plein écran (Linux)
+    if "--install" in sys.argv or "--uninstall" in sys.argv:
+        # Utilisé par deploy/install.sh et deploy/uninstall.sh (Linux).
+        # --install active les deux, sauf --no-autostart / --no-kiosk ; --uninstall enlève les deux.
         settings_store.ensure_data_dir()
         port = int(settings_store.load()["port"])
-        for label, (ok, message) in (("Démarrage automatique", appliance.enable_autostart()),
-                                     ("Plein écran (kiosk)", appliance.enable_kiosk(port))):
+        removing = "--uninstall" in sys.argv
+        want_autostart = not removing and "--no-autostart" not in sys.argv
+        want_kiosk = not removing and "--no-kiosk" not in sys.argv
+        for label, (ok, message) in (
+                ("Démarrage automatique",
+                 appliance.enable_autostart() if want_autostart else appliance.disable_autostart()),
+                ("Plein écran (kiosk)",
+                 appliance.enable_kiosk(port) if want_kiosk else appliance.disable_kiosk())):
             print(f"[{'ok' if ok else '!!'}] {label} : {message}")
         return
     settings = settings_store.load()
