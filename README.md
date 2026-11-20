@@ -54,6 +54,22 @@ plein écran est choisi) et télécharge Bambu Control dans `~/Bambu-Control`.
 réglages ne sont pas touchés). Ces deux choix se changent aussi dans
 **Paramètres → Démarrage**.
 
+À la fin, **Bambu Control est lancé tout de suite** : ouvre
+`http://localhost:5000` sur le Pi (ou `http://<ip-du-pi>:5000` depuis un autre
+appareil).
+
+**Arrêter / relancer Bambu Control :**
+
+| | Avec démarrage automatique | Sans démarrage automatique |
+|---|---|---|
+| Arrêter | `systemctl --user stop bambu-control` | `pkill -f "Bambu-Control/app.py"` (ou Ctrl+C dans son terminal) |
+| Relancer | `systemctl --user start bambu-control` | `cd ~/Bambu-Control && .venv/bin/python app.py` |
+| État | `systemctl --user status bambu-control` | — |
+
+Sans démarrage automatique, laisse le terminal ouvert après la relance (le
+fermer arrête Bambu Control). Utilise bien `.venv/bin/python` et non
+`python3` : c'est le Python qui contient les modules installés.
+
 Répondre d'avance, sans questions (ex. ni démarrage automatique ni plein écran) :
 
 ```bash

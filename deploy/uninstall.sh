@@ -32,6 +32,8 @@ pkill -f -- "--user-data-dir=$HOME/.config/bambu-control-kiosk" 2>/dev/null || t
 rm -f "$HOME/.config/autostart/bambu-control-kiosk.desktop" "$HOME/.local/bin/bambu-kiosk"
 rm -rf "$HOME/.config/bambu-control-kiosk"
 
+pkill -f -- "$DIR/app.py" 2>/dev/null || true
+
 echo "==> Suppression de $DIR"
 if [ ! -d "$DIR" ]; then
   echo "   (dossier absent)"
