@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
-INFO_VERSION = 2   # à augmenter quand on lit de nouvelles infos (invalide le cache)
+INFO_VERSION = 3   # à augmenter quand on lit de nouvelles infos (invalide le cache)
 
 
 def _float(value):
@@ -70,8 +70,35 @@ def parse(path: Path) -> dict:
             "version": INFO_VERSION,
             "printer_model": str(project.get("printer_model") or ""),
             "filament_count": len(filament_types) if isinstance(filament_types, list) else 0,
+            # Prix au kilo de chaque filament, tel que réglé dans Bambu Studio (None si absent)
+            "filament_prices": [_float(v) for v in project.get("filament_cost") or []]
+            if isinstance(project.get("filament_cost"), list) else [],
             "plates": plates,
         }
+
+
+def plate_cost(info: dict, plate_index: int, default_price_kg: float) -> dict:
+    """
+    Filaments d'un plateau avec leur coût (comme Bambu Studio : grammes × prix au kilo).
+    {plate, filaments: [{id, type, color, used_g, price_kg}], weight_g, filament_cost, prediction_s}
+    """
+    plates = info.get("plates") or []
+    plate = next((p for p in plates if p["index"] == plate_index), None) or (plates[0] if len(plates) == 1 else None)
+    if not plate:
+        return {"plate": plate_index, "filaments": [], "weight_g": None, "filament_cost": None, "prediction_s": None}
+    prices = info.get("filament_prices") or []
+    filaments, total = [], 0.0
+    for f in plate["filaments"]:
+        try:
+            index = int(f["id"]) - 1
+        except (TypeError, ValueError):
+            index = -1
+        price = prices[index] if 0 <= index < len(prices) and prices[index] else default_price_kg
+        cost = round((f.get("used_g") or 0) / 1000 * price, 2)
+        total += cost
+        filaments.append({**f, "price_kg": price, "cost": cost})
+    return {"plate": plate["index"], "filaments": filaments, "weight_g": plate.get("weight_g"),
+            "filament_cost": round(total, 2), "prediction_s": plate.get("prediction_s")}
 
 
 def thumbnail(path: Path, plate_index: int = 1) -> bytes | None:

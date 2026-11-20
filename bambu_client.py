@@ -519,6 +519,21 @@ class PrinterWorker:
         with self._sd_lock:
             self.sd.download(name, destination)
 
+    def sd_list_dir(self, folder: str) -> list[dict]:
+        self._require_printer()
+        with self._sd_lock:
+            return self.sd.list_dir(folder)
+
+    def sd_read_small(self, path: str) -> bytes:
+        self._require_printer()
+        with self._sd_lock:
+            return self.sd.read_small(path)
+
+    def sd_download_path(self, path: str, destination: Path):
+        self._require_printer()
+        with self._sd_lock:
+            self.sd.download_path(path, destination)
+
     def delete_sd_file(self, name: str):
         self._require_printer()
         status = self._current_status()

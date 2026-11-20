@@ -60,6 +60,17 @@ def is_safe_name(name: str) -> bool:
         and not name.startswith(".") and len(name) <= 255
 
 
+ALLOWED_FOLDERS = ("/", "/cache", "/model", "/timelapse")
+
+
+def is_safe_path(path: str) -> bool:
+    """Chemin absolu dans un dossier autorisé, sans « .. » : /fichier, /cache/fichier…"""
+    if not path or not path.startswith("/") or "\\" in path or ".." in path.split("/"):
+        return False
+    folder, _, name = path.rpartition("/")
+    return (folder or "/") in ALLOWED_FOLDERS and is_safe_name(name)
+
+
 class SdCard:
     def __init__(self, ip: str, access_code: str, timeout: float = TIMEOUT_SECONDS):
         self.ip = ip
@@ -113,6 +124,52 @@ class SdCard:
         with self.session() as ftp, open(destination, "wb") as f:
             try:
                 ftp.retrbinary(f"RETR {name}", f.write, blocksize=65536)
+            except Exception as e:
+                raise SdCardError(f"Lecture du fichier impossible : {e}")
+
+    # ── Dossiers de l'imprimante (/cache : impressions lancées, /timelapse : vidéos) ──
+    def list_dir(self, folder: str) -> list[dict]:
+        """Fichiers d'un dossier autorisé : [{name, size, modified}] (vide si le dossier n'existe pas)."""
+        if folder not in ALLOWED_FOLDERS:
+            raise SdCardError("Dossier non autorisé.")
+        lines: list[str] = []
+        with self.session() as ftp:
+            try:
+                ftp.retrlines(f"LIST {folder}", lines.append)
+            except Exception:
+                return []
+        files = [f for f in (parse_list_line(line) for line in lines) if f]
+        return [f for f in files if not f["name"].startswith(".")]
+
+    def read_small(self, path: str, max_bytes: int = 64 * 1024) -> bytes:
+        """Lit un petit fichier (ex. /cache/1_x.gcode.bbl) en mémoire."""
+        if not is_safe_path(path):
+            raise SdCardError("Chemin invalide.")
+        chunks, size = [], 0
+
+        def collect(block):
+            nonlocal size
+            size += len(block)
+            if size > max_bytes:
+                raise SdCardError("Fichier trop gros.")
+            chunks.append(block)
+
+        with self.session() as ftp:
+            try:
+                ftp.retrbinary(f"RETR {path}", collect)
+            except SdCardError:
+                raise
+            except Exception as e:
+                raise SdCardError(f"Lecture impossible : {e}")
+        return b"".join(chunks)
+
+    def download_path(self, path: str, destination: Path) -> None:
+        """Télécharge un fichier d'un dossier autorisé (/x.3mf, /cache/…, /timelapse/…)."""
+        if not is_safe_path(path):
+            raise SdCardError("Chemin invalide.")
+        with self.session() as ftp, open(destination, "wb") as f:
+            try:
+                ftp.retrbinary(f"RETR {path}", f.write, blocksize=65536)
             except Exception as e:
                 raise SdCardError(f"Lecture du fichier impossible : {e}")
 

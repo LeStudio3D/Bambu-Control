@@ -9,6 +9,24 @@ le mode kiosk demande un bureau graphique.
 
 ---
 
+## Méthode rapide (recommandée) : une seule commande
+
+1. Avec **Raspberry Pi Imager**, installe *Raspberry Pi OS (64-bit)* **avec bureau**
+   (configure le Wi-Fi et ton nom d'utilisateur dans les options de l'Imager).
+2. Démarre le Pi, ouvre un terminal et colle :
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/LeStudio3D/Bambu-Control/main/deploy/install.sh | bash
+```
+
+3. Redémarre (`sudo reboot`) : la console s'ouvre en plein écran. Crée ton compte
+   administrateur et ajoute ton imprimante depuis la page (étapes 3 et 4 ci-dessous).
+
+Pour mettre à jour plus tard : relance la même commande. Les étapes 1, 2 et 5
+ci-dessous décrivent la **méthode manuelle**, utile pour comprendre ou dépanner.
+
+---
+
 ## 1. Préparer le Raspberry Pi
 
 1. Avec **Raspberry Pi Imager**, installe *Raspberry Pi OS (64-bit)* — la version

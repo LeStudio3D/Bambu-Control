@@ -40,17 +40,20 @@ const BC = (() => {
   }
 
   // ── AMS (accueil et page Imprimante) : un bloc par AMS, avec ses emplacements ──
-  function amsSlotHtml(slot) {
+  // spools : bobines du stock posées sur l'imprimante ({emplacement: {remaining_g, low, name}})
+  function amsSlotHtml(slot, spools = {}) {
+    const spool = spools[slot.label];
     if (slot.empty) {
       return `<div class="ams-slot empty"><span class="ams-num">${escapeHtml(slot.label)}</span>
         <span class="ams-swatch"></span><span class="ams-type">Vide</span><span class="ams-remain">—</span></div>`;
     }
-    const remain = slot.remaining != null ? `${slot.remaining} %` : "niveau inconnu";
-    return `<div class="ams-slot ${slot.active ? "active" : ""}" title="${slot.active ? "En cours d'utilisation" : ""}">
+    const remain = slot.remaining != null ? `${slot.remaining} %` : spool ? "" : "niveau inconnu";
+    const stock = spool ? `<span class="ams-spool" title="${escapeHtml(spool.name)} (stock)">≈ ${Math.round(spool.remaining_g)} g</span>` : "";
+    return `<div class="ams-slot ${slot.active ? "active" : ""} ${spool?.low ? "low" : ""}" title="${slot.active ? "En cours d'utilisation" : ""}">
       <span class="ams-num">${escapeHtml(slot.label)}</span>
       <span class="ams-swatch" style="background:#${hexColor(slot.color)}"></span>
       <span class="ams-type">${escapeHtml(slot.type || "?")}</span>
-      <span class="ams-remain">${remain}</span></div>`;
+      ${remain ? `<span class="ams-remain">${remain}</span>` : ""}${stock}</div>`;
   }
 
   function amsUnitFacts(unit) {
@@ -65,17 +68,17 @@ const BC = (() => {
     return facts.join(" · ");
   }
 
-  function amsSlotsHtml(slots) {
-    return `<div class="ams">${slots.map(amsSlotHtml).join("")}</div>`;
+  function amsSlotsHtml(slots, spools = {}) {
+    return `<div class="ams">${slots.map(s => amsSlotHtml(s, spools)).join("")}</div>`;
   }
 
-  function amsUnitsHtml(units) {
+  function amsUnitsHtml(units, spools = {}) {
     return units.map(unit => `
       <div class="ams-unit">
         <div class="ams-unit-head"><strong>${escapeHtml(unit.name)}</strong>
           <span class="muted">${escapeHtml(unit.model)}</span>
           <span class="ams-facts">${amsUnitFacts(unit)}</span></div>
-        ${amsSlotsHtml(unit.slots)}
+        ${amsSlotsHtml(unit.slots, spools)}
       </div>`).join("");
   }
 

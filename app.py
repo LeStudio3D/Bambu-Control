@@ -33,11 +33,14 @@ import auth
 import bambu_client as bc
 import commands
 import config
+import extras_routes
+import job_extras
 import models
 import printer_check
 import printers_store as store
 import sd_card
 import settings_store
+import spools
 from auth import login_required
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -56,6 +59,8 @@ app.config.update(
 )
 
 monitor = ai_monitor.AiMonitor(bc.manager)   # surveillance IA + automatisations
+spool_store = spools.SpoolStore(lambda: bc.manager.history)   # stock de filament
+extras = job_extras.JobExtras(bc.manager, spool_store)        # coûts, stock, timelapses
 _workers_started = False
 _workers_lock = threading.Lock()
 
@@ -69,6 +74,7 @@ def start_printer_workers():
         _workers_started = True
     bc.manager.load_from_store(store.list_printers())
     monitor.start()
+    extras.start()
 
 
 @app.before_request
@@ -127,6 +133,7 @@ def _printers_page(error=None, status=200):
         startup=appliance.status(),
         ai=ai_features.public_config(),
         ai_providers=ai_client.PROVIDERS,
+        costs=job_extras.cost_settings(),
     ), status
 
 
@@ -428,6 +435,9 @@ def api_status():
     pid, _ = _resolve_worker()
     data = worker.snapshot()
     data["ai"] = monitor.status(pid)
+    # Bobines du stock posées sur cette imprimante : poids restant affiché sur les emplacements
+    data["spools"] = {slot: {"id": s["id"], "name": s["name"], "remaining_g": s["remaining_g"], "low": s["low"]}
+                      for slot, s in spool_store.by_slot(pid).items()}
     return jsonify({**worker.connection_info(), "data": data})
 
 
@@ -471,6 +481,7 @@ def api_history_clear():
     for name in unused_photos:
         if re.fullmatch(r"[A-Za-z0-9_.-]+\.jpg", name):
             (ai_monitor.PHOTOS_DIR / name).unlink(missing_ok=True)
+    job_extras.remove_media(counts.pop("job_ids", []))      # vignettes et timelapses
     who = "de toutes les imprimantes" if pid == "all" else f"de « {store.get_printer(pid)['name']} »"
     log.info("Historique effacé %s : %s", who, counts)
     return jsonify({"success": True, "counts": counts,
@@ -646,6 +657,7 @@ def api_command(name):
 
 
 app.register_blueprint(ai_routes.create_blueprint(_resolve_worker, monitor))
+app.register_blueprint(extras_routes.create_blueprint(_resolve_worker, extras, spool_store))
 
 
 def main():
@@ -653,6 +665,14 @@ def main():
         auth.reset_admin()
         print("Compte administrateur supprimé. Relance Bambu Control puis ouvre la page web "
               "pour en créer un nouveau (tes imprimantes et ton historique sont conservés).")
+        return
+    if "--install" in sys.argv:
+        # Utilisé par deploy/install.sh : démarrage automatique + plein écran (Linux)
+        settings_store.ensure_data_dir()
+        port = int(settings_store.load()["port"])
+        for label, (ok, message) in (("Démarrage automatique", appliance.enable_autostart()),
+                                     ("Plein écran (kiosk)", appliance.enable_kiosk(port))):
+            print(f"[{'ok' if ok else '!!'}] {label} : {message}")
         return
     settings = settings_store.load()
     host, port = settings["host"], int(settings["port"])

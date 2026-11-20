@@ -150,14 +150,15 @@ class AiMonitor:
         if cfg["finish_light_off"] and ok:
             worker.execute("light", {"on": False})
         comment, photo = "", None
-        if cfg["finish_photo"] and ai_features.vision_ready(cfg):
-            frame = grab_frame(worker)
+        if cfg["finish_photo"]:          # photo pour la galerie, même sans IA
+            frame = grab_frame(worker, wait_seconds=25)
             if frame:
                 photo = save_photo(frame, f"fin_{job_id}")
-                try:
-                    comment = ai_features.comment_finished(frame, name, cfg)["comment"]
-                except ai_client.AiError as e:
-                    comment = f"(analyse IA impossible : {e})"
+                if ai_features.vision_ready(cfg):
+                    try:
+                        comment = ai_features.comment_finished(frame, name, cfg)["comment"]
+                    except ai_client.AiError as e:
+                        comment = f"(analyse IA impossible : {e})"
                 self.history.set_job_ai(job_id, comment, photo)
         label = history.JOB_STATUS_LABELS.get(job["status"], job["status"]).lower()
         title = f"Impression terminée : {name}" if ok else f"Impression {label} : {name}"

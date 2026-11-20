@@ -195,6 +195,29 @@
   </div>
 </div>
 
+<section class="surface" id="costs" style="margin-top: var(--gap)">
+  <form method="POST" action="{{ url_for('extras.settings_costs') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="section">
+      <div class="section-head"><span class="label">Coût des impressions</span>
+        <span class="muted">visible dans l'Historique (par impression et par mois)</span></div>
+      <p class="hint" style="margin-top: 0">Le filament est compté comme dans Bambu Studio : grammes du fichier
+        × prix au kilo réglé dans le profil de filament. Une impression arrêtée en route est comptée au prorata.</p>
+      <div class="columns" style="gap: 0 var(--gap); grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))">
+        <div class="field"><label for="cost-kwh">Prix de l'électricité (€ / kWh)</label>
+          <input type="number" id="cost-kwh" name="electricity_price_kwh" value="{{ costs.electricity_price_kwh }}" min="0" max="5" step="0.0001"></div>
+        <div class="field"><label for="cost-power">Puissance moyenne de l'imprimante (W)</label>
+          <input type="number" id="cost-power" name="printer_power_w" value="{{ costs.printer_power_w }}" min="10" max="3000" step="1"></div>
+        <div class="field"><label for="cost-fil">Prix du filament par défaut (€ / kg)</label>
+          <input type="number" id="cost-fil" name="default_filament_price_kg" value="{{ costs.default_filament_price_kg }}" min="0" max="1000" step="0.01"></div>
+      </div>
+      <p class="hint">Puissance moyenne : environ 100 W pour une A1 en PLA, 150 à 200 W pour une X1 / H2D avec chambre
+        chaude. Le prix par défaut sert seulement si le fichier n'indique pas de prix.</p>
+      <button type="submit" class="btn btn-primary">Enregistrer les coûts</button>
+    </div>
+  </form>
+</section>
+
 <section class="surface" id="ai" style="margin-top: var(--gap)">
   <form method="POST" action="{{ url_for('ai.settings_ai') }}" id="ai-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -275,8 +298,8 @@
         <span><strong>Vérifier que le plateau est vide avant chaque lancement (IA)</strong>
           <span class="muted">Si l'IA voit quelque chose, elle demande confirmation avant de lancer.</span></span></label>
       <label class="check toggle-row"><input type="checkbox" name="finish_photo" {% if ai.finish_photo %}checked{% endif %}>
-        <span><strong>Photo et commentaire en fin d'impression (IA)</strong>
-          <span class="muted">Gardés dans l'historique.</span></span></label>
+        <span><strong>Photo en fin d'impression (+ commentaire si l'IA est activée)</strong>
+          <span class="muted">Gardée dans la galerie de l'historique, même sans IA.</span></span></label>
       <label class="check toggle-row"><input type="checkbox" name="finish_light_off" {% if ai.finish_light_off %}checked{% endif %}>
         <span><strong>Éteindre la lumière en fin d'impression</strong>
           <span class="muted">Sans IA.</span></span></label>

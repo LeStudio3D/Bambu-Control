@@ -194,10 +194,30 @@ function renderMapping() {
     return `<div class="map-row">
       <div class="map-file"><span class="legend-swatch" style="background:#${hex}"></span>
         <span>${BC.escapeHtml(f.type || "?")} <small>filament ${BC.escapeHtml(f.id)}${f.used_g != null ? " · " + formatGrams(f.used_g) : ""}</small></span></div>
-      <select class="input" data-map-id="${BC.escapeHtml(f.id)}">${slots.map(s => slotOption(s, chosen)).join("")}</select>
+      <select class="input" data-map-id="${BC.escapeHtml(f.id)}" data-need="${f.used_g ?? ""}">${slots.map(s => slotOption(s, chosen)).join("")}</select>
       ${sug.tray == null ? `<div class="map-note">${BC.escapeHtml(sug.note)} : vérifie la bobine choisie.</div>` : ""}
+      <div class="map-stock" data-stock-for="${BC.escapeHtml(f.id)}"></div>
     </div>`;
   }).join("");
+  updateStockNotes();
+}
+
+// Stock de filament : la bobine choisie a-t-elle assez de filament pour ce plateau ?
+function updateStockNotes() {
+  const spools = BC.currentStatus()?.data?.spools || {};
+  const labels = Object.fromEntries(amsSlots().map(s => [s.global_index, s.label]));
+  document.querySelectorAll("#launch-mapping select[data-map-id]").forEach(select => {
+    const note = document.querySelector(`[data-stock-for="${select.dataset.mapId}"]`);
+    if (!note) return;
+    const spool = spools[labels[Number(select.value)]];
+    const need = Number(select.dataset.need) || 0;
+    if (!spool || !need) { note.textContent = ""; note.className = "map-stock"; return; }
+    const short = spool.remaining_g < need;
+    note.className = `map-stock ${short ? "is-short" : ""}`;
+    note.textContent = short
+      ? `Stock : il ne reste qu'environ ${Math.round(spool.remaining_g)} g sur cette bobine (${Math.round(need)} g nécessaires).`
+      : `Stock : ≈ ${Math.round(spool.remaining_g)} g disponibles, ${Math.round(need)} g nécessaires.`;
+  });
 }
 
 function renderPlateOptions() {
@@ -311,6 +331,7 @@ async function launchFile(file) {
 
 function setupLaunchDialog() {
   document.getElementById("launch-plate").addEventListener("change", renderPlateOptions);
+  document.getElementById("launch-mapping").addEventListener("change", updateStockNotes);
   document.querySelectorAll("#launch-source [data-source]").forEach(b =>
     b.addEventListener("click", () => setSource(b.dataset.source)));
 }

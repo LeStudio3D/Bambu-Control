@@ -142,7 +142,7 @@ function renderDrying(data, online) {
     const el = box.querySelector(`[data-dry-unit="${unit.id}"]`);
     if (!el) return;
     el.querySelector("[data-facts]").innerHTML = BC.amsUnitFacts(unit);
-    el.querySelector("[data-slots]").innerHTML = BC.amsSlotsHtml(unit.slots);
+    el.querySelector("[data-slots]").innerHTML = BC.amsSlotsHtml(unit.slots, data.spools || {});
     const form = el.querySelector("[data-dry-form]");
     if (form) {
       const blocked = (unit.dry_blocked || []).length > 0;

@@ -64,15 +64,15 @@ function renderTemps(data) {
   if (data.has_chamber_sensor) renderTemp("t-chamber", data.chamber_temp, null);
 }
 
-function renderAms(units) {
+function renderAms(units, spools) {
   const box = $("ams");
   if (!units || units.length === 0) {
     box.innerHTML = `<div class="ams-empty-msg">Aucun AMS détecté.</div>`;
     $("ams-hint").textContent = "";
     return;
   }
-  box.innerHTML = BC.amsUnitsHtml(units);    // tous les AMS, l'un sous l'autre
-  const unknown = units.some(u => u.slots.some(s => !s.empty && s.remaining == null));
+  box.innerHTML = BC.amsUnitsHtml(units, spools || {});    // tous les AMS, l'un sous l'autre
+  const unknown = units.some(u => u.slots.some(s => !s.empty && s.remaining == null && !(spools || {})[s.label]));
   $("ams-hint").textContent = unknown ? "Niveau connu seulement pour les bobines Bambu" : "";
 }
 
@@ -149,7 +149,7 @@ function render(status) {
   renderState(data, online);
   renderJob(data);
   renderTemps(data);
-  renderAms(data.ams_units);
+  renderAms(data.ams_units, data.spools);
   renderButtons(data, online);
   renderAi(data, online);
 }

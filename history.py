@@ -35,6 +35,15 @@ JOB_STATUS_LABELS = {
     "running": "En cours", "finished": "Terminée", "failed": "Échec",
     "stopped": "Arrêtée", "interrupted": "Interrompue",
 }
+# Colonnes ajoutées après la première version (créées automatiquement au démarrage)
+JOB_EXTRA_COLUMNS = {
+    "ai_comment": "TEXT", "photo": "TEXT",                 # IA : commentaire et photo de fin
+    "plate": "INTEGER", "plan_json": "TEXT",               # plateau, filaments prévus (fichier .3mf)
+    "filament_g": "REAL", "filament_cost": "REAL",         # filament réellement consommé (estimé)
+    "energy_kwh": "REAL", "energy_cost": "REAL", "total_cost": "REAL",
+    "thumbnail": "TEXT", "timelapse": "TEXT",              # médias (dossier data/media/job_<id>)
+    "timelapse_wanted": "INTEGER",
+}
 
 
 def now_iso() -> str:
@@ -121,9 +130,9 @@ class HistoryDB:
                 CREATE INDEX IF NOT EXISTS idx_ai_events ON ai_events(id);
             """)
             job_columns = {row[1] for row in self.conn.execute("PRAGMA table_info(jobs)")}
-            for column in ("ai_comment", "photo"):   # ajoutées avec les fonctions IA
+            for column, kind in JOB_EXTRA_COLUMNS.items():   # colonnes ajoutées au fil des versions
                 if column not in job_columns:
-                    self.conn.execute(f"ALTER TABLE jobs ADD COLUMN {column} TEXT")
+                    self.conn.execute(f"ALTER TABLE jobs ADD COLUMN {column} {kind}")
             columns = {row[1] for row in self.conn.execute("PRAGMA table_info(snapshots)")}
             if "job_id" not in columns:  # base créée par une ancienne version
                 self.conn.execute("ALTER TABLE snapshots ADD COLUMN job_id INTEGER")
@@ -252,9 +261,12 @@ class HistoryDB:
         Efface l'historique d'une imprimante (ou de toutes si printer_id est None) :
         impressions, relevés (courbes) et erreurs. L'impression en cours est gardée.
         Renvoie (nombre de lignes effacées, photos de fin d'impression devenues inutiles).
+        counts["job_ids"] : impressions effacées (pour supprimer leurs vidéos et vignettes).
         """
         printer_filter, args = ("AND printer_id = ?", (printer_id,)) if printer_id else ("", ())
         with self.lock:
+            deleted_ids = [r[0] for r in self.conn.execute(
+                f"SELECT id FROM jobs WHERE status != 'running' {printer_filter}", args)]
             running = [r[0] for r in self.conn.execute(
                 f"SELECT id FROM jobs WHERE status = 'running' {printer_filter}", args)]
             keep = f"AND (job_id IS NULL OR job_id NOT IN ({','.join('?' * len(running))}))" if running else ""
@@ -272,7 +284,38 @@ class HistoryDB:
             still_used = {r[0] for r in self.conn.execute(
                 "SELECT photo FROM ai_events WHERE photo IS NOT NULL "
                 "UNION SELECT photo FROM jobs WHERE photo IS NOT NULL")}
+        counts["job_ids"] = deleted_ids
         return counts, sorted(photos - still_used)
+
+    # ── Coûts et médias d'une impression ──
+    def update_job_fields(self, job_id: int, **fields):
+        """Met à jour des colonnes de JOB_EXTRA_COLUMNS (les autres sont ignorées)."""
+        fields = {k: v for k, v in fields.items() if k in JOB_EXTRA_COLUMNS}
+        if not fields:
+            return
+        sets = ", ".join(f"{k} = ?" for k in fields)
+        with self.lock:
+            self.conn.execute(f"UPDATE jobs SET {sets} WHERE id = ?", list(fields.values()) + [job_id])
+            self.conn.commit()
+
+    def jobs_between(self, printer_id: str, start: str, end: str) -> list[dict]:
+        return self._rows("SELECT id, started_at, ended_at, timelapse FROM jobs WHERE printer_id = ? "
+                          "AND started_at <= ? AND COALESCE(ended_at, ?) >= ?", (printer_id, end, end, start))
+
+    def monthly_costs(self, printer_id: str | None = None, months: int = 12) -> list[dict]:
+        """Totaux par mois (impressions terminées ou arrêtées) : filament, électricité, total."""
+        since = (datetime.now().replace(day=1) - timedelta(days=31 * (months - 1))).strftime("%Y-%m-01")
+        where = "WHERE started_at >= ? AND status != 'running'" + (" AND printer_id = ?" if printer_id else "")
+        params = [since] + ([printer_id] if printer_id else [])
+        return self._rows(
+            "SELECT substr(started_at, 1, 7) AS month, COUNT(*) AS jobs, "
+            "ROUND(COALESCE(SUM(filament_g), 0), 1) AS filament_g, "
+            "ROUND(COALESCE(SUM(filament_cost), 0), 2) AS filament_cost, "
+            "ROUND(COALESCE(SUM(energy_kwh), 0), 2) AS energy_kwh, "
+            "ROUND(COALESCE(SUM(energy_cost), 0), 2) AS energy_cost, "
+            "ROUND(COALESCE(SUM(total_cost), 0), 2) AS total_cost, "
+            "SUM(CASE WHEN total_cost IS NULL THEN 1 ELSE 0 END) AS unknown "
+            f"FROM jobs {where} GROUP BY month ORDER BY month DESC", params)
 
     def forget_photos(self, names: list[str]):
         """Photos supprimées du disque : on retire le lien dans les alertes."""
@@ -310,6 +353,8 @@ class HistoryDB:
         for row in rows:
             row["filament"] = json.loads(row.pop("filament_json") or "[]")
             row["ams_start"] = json.loads(row.pop("ams_start_json") or "[]")
+            row["plan"] = json.loads(row.pop("plan_json") or "null")
+            row["status_label"] = JOB_STATUS_LABELS.get(row["status"], row["status"])
         return rows
 
     def _rows(self, sql: str, params=()) -> list[dict]:
@@ -335,6 +380,7 @@ class HistoryDB:
         for row in rows:
             row["filament"] = json.loads(row.pop("filament_json") or "[]")
             row.pop("ams_start_json", None)
+            row["plan"] = json.loads(row.pop("plan_json") or "null")
             row["status_label"] = JOB_STATUS_LABELS.get(row["status"], row["status"])
         return rows
 
@@ -362,11 +408,13 @@ class HistoryDB:
         since = (datetime.now() - timedelta(days=days)).isoformat(timespec="seconds")
         where = "WHERE started_at >= ?" + (" AND printer_id = ?" if printer_id else "")
         params = [since] + ([printer_id] if printer_id else [])
-        rows = self._rows(f"SELECT status, COUNT(*) AS n, COALESCE(SUM(duration_s), 0) AS seconds "
+        rows = self._rows(f"SELECT status, COUNT(*) AS n, COALESCE(SUM(duration_s), 0) AS seconds, "
+                          f"COALESCE(SUM(total_cost), 0) AS cost, COUNT(total_cost) AS costed "
                           f"FROM jobs {where} GROUP BY status", params)
         by_status = {r["status"]: r["n"] for r in rows}
         finished_jobs = sum(n for s, n in by_status.items() if s != "running")
         return {
+            "total_cost": round(sum(r["cost"] for r in rows), 2) if any(r["costed"] for r in rows) else None,
             "days": days,
             "jobs": sum(by_status.values()),
             "finished": by_status.get("finished", 0),

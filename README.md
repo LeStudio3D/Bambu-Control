@@ -18,6 +18,11 @@ depuis un PC, une tablette ou un téléphone.
   nivellement du plateau, calibration du flux dynamique, timelapse (bloqué si
   le plateau est imprimé « par objet »)
 - Historique : impressions, durées, taux de réussite, erreurs, filament, courbes
+- **Coût de chaque impression** (filament au prix de Bambu Studio + électricité)
+  et **total par mois**
+- **Galerie** : vignette, photo de fin et **vidéo timelapse** de chaque impression
+- **Stock de filament** : bobines, poids restant décompté à chaque impression,
+  alerte avant de manquer, vérification au lancement
 - Plusieurs imprimantes, test de connexion pas à pas
 - Mode kiosk : le Pi démarre directement sur la console
 - **Intelligence artificielle** (Ollama local, Ollama Cloud ou API compatible OpenAI) :
@@ -29,7 +34,22 @@ avec Python 3.12 ou plus récent.
 
 ---
 
-## Installation
+## Installation sur Raspberry Pi : une seule commande
+
+Sur un Raspberry Pi avec **Raspberry Pi OS (64 bits, avec bureau)**, ouvre un
+terminal et colle :
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/LeStudio3D/Bambu-Control/main/deploy/install.sh | bash
+```
+
+Le script installe tout (Python, ffmpeg pour les timelapses, Chromium),
+télécharge Bambu Control dans `~/Bambu-Control`, active le démarrage
+automatique et le plein écran. Redémarre le Pi : la console s'ouvre toute
+seule. **Pour mettre à jour plus tard, relance la même commande** (tes réglages
+ne sont pas touchés).
+
+## Installation manuelle (Linux, Windows, macOS)
 
 ```bash
 git clone https://github.com/LeStudio3D/Bambu-Control.git
@@ -111,6 +131,56 @@ bambu-kiosk stop
 puis `launchctl load ~/Library/LaunchAgents/bambu-control.plist`.
 
 ---
+
+## Coûts, galerie et stock de filament
+
+- **Coût** : au début de chaque impression, Bambu Control lit sur la carte SD le
+  fichier lancé (même depuis Bambu Studio ou l'écran de l'imprimante) : plateau,
+  bobines utilisées, grammes et **prix au kilo de chaque filament réglés dans
+  Bambu Studio**. À la fin, il ajoute l'électricité (durée × puissance moyenne ×
+  prix du kWh, réglables dans **Paramètres → Coût des impressions**). Une
+  impression arrêtée en route est comptée au prorata. Totaux par mois dans
+  l'**Historique**.
+- **Galerie** (Historique) : vignette du fichier, photo de fin d'impression
+  (caméra, même sans IA) et **vidéo timelapse** si elle a été activée au
+  lancement. Les vidéos sont copiées depuis la carte SD de l'imprimante (dossier
+  `timelapse`) et converties en MP4 si **ffmpeg** est installé (indispensable
+  pour les A1 / P1 qui enregistrent en AVI). Bouton **Récupérer les timelapses**
+  pour les vidéos plus anciennes.
+- **Stock de filament** (menu **Filament**) : ajoute tes bobines (poids, prix,
+  seuil d'alerte) et pose-les sur un emplacement AMS ou le support externe. Le
+  filament de chaque impression est décompté automatiquement ; une alerte
+  prévient quand une bobine passe sous son seuil, et la fenêtre de lancement
+  signale une bobine qui n'a pas assez de filament pour le plateau choisi.
+
+Les médias sont rangés dans `data/media/` (une sous-dossier par impression).
+
+## Accès depuis l'extérieur (hors de la maison)
+
+Bambu Control a son propre compte (identifiant + mot de passe), donc il peut
+être ouvert sur Internet par une **redirection de port** de la box :
+
+1. Donne une adresse IP fixe à la machine qui fait tourner Bambu Control
+   (box → « Baux DHCP statiques » / « IP fixe »).
+2. Box → **Redirection de ports** : port externe au choix (ex. `8443`, évite
+   `5000` qui est très scanné) → IP de la machine, port `5000`, protocole TCP.
+   Sur une **Livebox** : *Configuration avancée → Réseau → NAT/PAT*.
+3. Depuis l'extérieur : `http://<ton-ip-publique>:8443` (ou un nom DynDNS).
+
+**À savoir avant d'ouvrir le port :**
+
+- En `http://`, le mot de passe circule **en clair** sur Internet (un Wi-Fi
+  public peut le lire). Le mieux est de passer par **HTTPS** avec un *reverse
+  proxy* : celui de ton NAS (Synology : *Portail de connexion → Proxy inversé*,
+  avec un certificat Let's Encrypt gratuit), Nginx Proxy Manager ou Caddy. La
+  box redirige alors le port 443 vers le proxy, qui transmet à Bambu Control.
+- Choisis un **mot de passe long** (12 caractères ou plus) : il protège la
+  caméra et les commandes de l'imprimante. Les essais répétés sont ralentis
+  automatiquement.
+- Garde le compte administrateur **créé avant** d'ouvrir le port (la page de
+  création de compte ne doit jamais être visible depuis Internet).
+- Alternative sans port ouvert : un VPN comme **Tailscale** ou le **VPN de la
+  Livebox / du NAS**, puis l'adresse locale comme à la maison.
 
 ## Intelligence artificielle
 
@@ -201,6 +271,17 @@ met en veille quand personne ne regarde, pour laisser la place à Bambu Handy.
 Bambu Control est fait pour un **réseau local**. Ne l'expose pas directement
 sur Internet ; pour un accès à distance, passe par un VPN (WireGuard, Tailscale…).
 
+## Projet sur un NAS (dossier partagé)
+
+Le dossier Bambu Control peut être rangé sur un NAS (ex. `\\mon-nas\partage`
+monté en lecteur réseau) et lancé depuis un PC. Deux règles :
+
+- **Une seule copie de Bambu Control à la fois** doit utiliser un même dossier
+  `data/` (la base de l'historique s'abîmerait si deux serveurs écrivaient
+  dedans en même temps). Le Raspberry Pi garde donc son propre dossier `data/`.
+- Les écritures dans la base sont plus lentes sur un partage réseau (sans
+  conséquence ici : au plus une toutes les 30 secondes).
+
 ## Données et mise à jour
 
 | Fichier | Contenu |
@@ -239,11 +320,14 @@ ai_features.py      Fonctions IA : consignes, analyse caméra, assistant, résum
 ai_monitor.py       Surveillance automatique et automatisations (thread de fond)
 ai_routes.py        Routes web de l'IA, de la file et des infos de fichiers
 print_queue.py      File d'impression (data/queue.json)
-threemf.py          Lecture des fichiers .3mf (durée, poids, filaments, vignette)
-deploy/             Modèle de service systemd, script bambu-kiosk
-templates/          Pages HTML (base.html + 5 pages + connexion)
+threemf.py          Lecture des fichiers .3mf (durée, poids, filaments, prix, vignette)
+job_extras.py       Coût, stock et timelapse de chaque impression (thread de fond)
+spools.py           Stock de filament (bobines, décompte, alertes)
+extras_routes.py    Routes web du stock, des coûts et des médias
+deploy/             Installation en une commande, service systemd, script bambu-kiosk
+templates/          Pages HTML (base.html + 6 pages + connexion)
 static/             CSS console, JavaScript par page
-docs/               Audit du projet, guide Raspberry Pi
+docs/               Guide Raspberry Pi
 ```
 
 ## Limites connues

@@ -35,6 +35,19 @@
     <div class="stat"><div class="label">Réussite</div><div class="stat-value" id="stat-success">—</div></div>
     <div class="stat"><div class="label">Temps d'impression</div><div class="stat-value" id="stat-time">—</div></div>
     <div class="stat"><div class="label">Échecs / arrêts</div><div class="stat-value" id="stat-failed">—</div></div>
+    <div class="stat"><div class="label">Coût</div><div class="stat-value" id="stat-cost">—</div></div>
+  </section>
+
+  <section class="surface">
+    <div class="section">
+      <div class="section-head">
+        <span class="label">Galerie</span>
+        <button type="button" class="btn btn-small" id="timelapse-sync">Récupérer les timelapses</button>
+      </div>
+      <div class="gallery" id="gallery"><div class="muted">Chargement…</div></div>
+      <p class="hint">Vignette du fichier, photo de fin d'impression et vidéo timelapse (si activé au lancement).
+        Touche une impression pour voir sa fiche.</p>
+    </div>
   </section>
 
   <section class="surface">
@@ -60,11 +73,25 @@
       <div class="table-scroll">
         <table class="data-table" id="jobs-table">
           <thead><tr>
-            <th>Début</th><th>Fichier</th><th>Durée</th><th>Statut</th><th>Avancement</th><th>Filament (≈)</th><th>Erreur</th><th>IA</th>
+            <th>Début</th><th>Fichier</th><th>Durée</th><th>Statut</th><th>Avancement</th><th>Filament</th><th>Coût</th><th>Erreur</th><th></th>
           </tr></thead>
-          <tbody><tr><td colspan="8" class="empty-cell">Chargement…</td></tr></tbody>
+          <tbody><tr><td colspan="9" class="empty-cell">Chargement…</td></tr></tbody>
         </table>
       </div>
+    </div>
+  </section>
+
+  <section class="surface">
+    <div class="section">
+      <div class="section-head"><span class="label">Coûts par mois</span>
+        <a class="link-button" href="{{ url_for('settings_page') }}#costs">Régler les prix →</a></div>
+      <div class="table-scroll">
+        <table class="data-table" id="costs-table">
+          <thead><tr><th>Mois</th><th>Impressions</th><th>Filament</th><th>Électricité</th><th>Total</th></tr></thead>
+          <tbody><tr><td colspan="5" class="empty-cell">Chargement…</td></tr></tbody>
+        </table>
+      </div>
+      <p class="hint" id="costs-hint"></p>
     </div>
   </section>
 
@@ -81,6 +108,13 @@
     </div>
   </section>
 </div>
+
+<dialog class="dialog dialog-wide" id="job-dialog">
+  <form method="dialog">
+    <div class="dialog-body" id="job-detail"></div>
+    <div class="dialog-actions"><button class="btn" value="close">Fermer</button></div>
+  </form>
+</dialog>
 {% endblock %}
 
 {% block scripts %}
