@@ -22,6 +22,7 @@ import print_queue
 import printers_store as store
 import sd_card
 import threemf
+import auth
 from auth import login_required
 
 log = logging.getLogger("ai_routes")
@@ -61,39 +62,46 @@ def create_blueprint(resolve_worker, monitor: ai_monitor.AiMonitor) -> Blueprint
     @login_required
     def settings_ai():
         form = request.form
-        updates = {
-            "enabled": form.get("enabled") == "on",
-            "provider": form.get("provider") if form.get("provider") in ai_client.PROVIDERS else "ollama",
-            "base_url": form.get("base_url", "").strip(),
-            "text_model": form.get("text_model", "").strip(),
-            "vision_model": form.get("vision_model", "").strip(),
-            "watch_enabled": form.get("watch_enabled") == "on",
-            "watch_log": form.get("watch_log") == "on",
-            "auto_pause": form.get("auto_pause") == "on",
-            "plate_check": form.get("plate_check") == "on",
-            "finish_photo": form.get("finish_photo") == "on",
-            "finish_light_off": form.get("finish_light_off") == "on",
-            "filament_alert": form.get("filament_alert") == "on",
-            "daily_summary": form.get("daily_summary") == "on",
-        }
-        for key, low, high in (("watch_interval_min", 1, 120), ("pause_confidence", 50, 100), ("timeout", 10, 600)):
+        # part : "services" ou "automations" (assistant, une étape chacun) ; sinon les deux.
+        part = form.get("part", "all")
+        updates = {}
+        if part in ("all", "services"):
+            updates.update({
+                "enabled": form.get("enabled") == "on",
+                "provider": form.get("provider") if form.get("provider") in ai_client.PROVIDERS else "ollama",
+                "base_url": form.get("base_url", "").strip(),
+                "text_model": form.get("text_model", "").strip(),
+                "vision_model": form.get("vision_model", "").strip(),
+                "vision_same": form.get("vision_same") == "on",
+                "vision_base_url": form.get("vision_base_url", "").strip(),
+            })
             try:
-                updates[key] = max(low, min(high, int(form.get(key, ""))))
+                updates["timeout"] = max(10, min(600, int(form.get("timeout", ""))))
             except ValueError:
                 pass
-        if re.fullmatch(r"\d{1,2}:\d{2}", form.get("daily_summary_time", "")):
-            updates["daily_summary_time"] = form["daily_summary_time"]
-        updates["vision_same"] = form.get("vision_same") == "on"
-        if form.get("vision_provider") in ai_client.PROVIDERS:
-            updates["vision_provider"] = form["vision_provider"]
-        updates["vision_base_url"] = form.get("vision_base_url", "").strip()
-        for field in ("api_key", "vision_api_key"):
-            if form.get(field, "").strip():          # vide = on garde la clé enregistrée
-                updates[field] = form[field].strip()
-            if form.get(f"clear_{field}") == "on":
-                updates[field] = ""
+            if form.get("vision_provider") in ai_client.PROVIDERS:
+                updates["vision_provider"] = form["vision_provider"]
+            for field in ("api_key", "vision_api_key"):
+                if form.get(field, "").strip():          # vide = on garde la clé enregistrée
+                    updates[field] = form[field].strip()
+                if form.get(f"clear_{field}") == "on":
+                    updates[field] = ""
+        if part in ("all", "automations"):
+            for key in ("watch_enabled", "watch_log", "auto_pause", "plate_check", "finish_photo",
+                        "finish_light_off", "filament_alert", "daily_summary"):
+                updates[key] = form.get(key) == "on"
+            for key, low, high in (("watch_interval_min", 1, 120), ("pause_confidence", 50, 100)):
+                try:
+                    updates[key] = max(low, min(high, int(form.get(key, ""))))
+                except ValueError:
+                    pass
+            if re.fullmatch(r"\d{1,2}:\d{2}", form.get("daily_summary_time", "")):
+                updates["daily_summary_time"] = form["daily_summary_time"]
         ai_features.save_config(updates)
-        flash("Réglages de l'intelligence artificielle enregistrés.", "ok")
+        flash("Réglages de l'intelligence artificielle enregistrés." if part != "automations"
+              else "Automatisations enregistrées.", "ok")
+        if form.get("next"):
+            return redirect(auth.safe_next_url(form["next"]))
         return redirect(url_for("settings_page") + "#ai")
 
     @bp.route("/api/ai/test", methods=["POST"])

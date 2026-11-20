@@ -104,11 +104,16 @@ un autre appareil du réseau). **Toute la configuration se fait dans l'interface
 
 1. Au premier lancement, la page propose de **créer le compte administrateur**.
    Depuis un autre appareil que la machine elle-même, elle demande aussi un
-   code à 6 caractères affiché dans le terminal du serveur (pour qu'un voisin
-   de réseau ne puisse pas créer le compte à ta place).
-2. **Paramètres → Ajouter une imprimante**.
-3. **Paramètres → Compte / Serveur / Démarrage** : mot de passe, port,
-   démarrage automatique et plein écran (Linux).
+   code à 6 caractères (pour qu'un voisin de réseau ne puisse pas créer le
+   compte à ta place) : il est affiché à la fin de l'installation, dans le
+   terminal du serveur et dans le fichier `data/setup_code.txt`.
+2. Juste après, un **assistant de configuration** guide pas à pas :
+   **imprimantes** (une ou plusieurs, avec test de connexion), **serveur**
+   (port, démarrage automatique, plein écran), **coût des impressions**,
+   **intelligence artificielle**, **automatisations** et **stock de filament**.
+   Chaque étape peut être passée et refaite plus tard.
+3. Tout se modifie ensuite dans **Paramètres**, d'où l'assistant peut aussi
+   être relancé.
 
 Mot de passe oublié : `python3 app.py --reset-admin`, puis relance
 `python3 app.py` et recrée le compte depuis la page (imprimantes et

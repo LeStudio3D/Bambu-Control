@@ -137,6 +137,22 @@ def _printers_page(error=None, status=200):
     ), status
 
 
+def _back(anchor: str = ""):
+    """Après un enregistrement : page demandée par le formulaire (assistant) ou Paramètres."""
+    nxt = request.form.get("next")
+    if nxt:
+        return redirect(auth.safe_next_url(nxt))
+    return redirect(url_for("settings_page") + anchor)
+
+
+def _printer_form_error(message: str, status: int):
+    """Erreur du formulaire d'imprimante : retour à l'assistant (message affiché) ou page Paramètres."""
+    if request.form.get("next"):
+        flash(message, "error")
+        return _back()
+    return _printers_page(message, status)
+
+
 def _log_in(username: str):
     session.clear()  # nouvelle session : évite la fixation de session
     session.permanent = True
@@ -180,7 +196,7 @@ def setup():
             auth.save_admin(username, password)
             log.info("Compte administrateur « %s » créé depuis l'interface", username)
             _log_in(username)
-            return redirect(url_for("settings_page"))
+            return redirect(url_for("welcome"))
     return render_template("setup.html", local=local, error=error,
                            code_file=auth.SETUP_CODE_FILE), (400 if error else 200)
 
@@ -218,7 +234,7 @@ def logout():
 def _console_page(template: str):
     """Pages qui ont besoin d'une imprimante : sinon direction Paramètres pour en ajouter une."""
     if not store.list_printers():
-        return redirect(url_for("settings_page"))
+        return redirect(url_for("welcome"))
     return render_template(template)
 
 
@@ -252,6 +268,47 @@ def settings_page():
     return _printers_page()
 
 
+# ── Assistant de première configuration ───────────────────
+WELCOME_STEPS = (
+    ("printers", "Imprimantes"),
+    ("server", "Serveur"),
+    ("costs", "Coûts"),
+    ("ai", "Intelligence artificielle"),
+    ("automations", "Automatisations"),
+    ("filament", "Stock de filament"),
+    ("done", "Terminé"),
+)
+
+
+@app.route("/welcome")
+@login_required
+def welcome():
+    """Assistant pas à pas, ouvert après la création du compte (et relançable depuis Paramètres)."""
+    keys = [key for key, _ in WELCOME_STEPS]
+    step = request.args.get("step", keys[0])
+    if step not in keys:
+        step = keys[0]
+    index = keys.index(step)
+    return render_template(
+        "welcome.html",
+        steps=WELCOME_STEPS,
+        step=step,
+        step_index=index,
+        next_step=url_for("welcome", step=keys[index + 1]) if index + 1 < len(keys) else url_for("index"),
+        prev_step=url_for("welcome", step=keys[index - 1]) if index > 0 else None,
+        here=url_for("welcome", step=step),
+        printers=[store.public_view(p) for p in store.list_printers()],
+        model_choices=models.model_choices(),
+        messages=get_flashed_messages(with_categories=True),
+        port=settings_store.load()["port"],
+        startup=appliance.status(),
+        ai=ai_features.public_config(),
+        ai_providers=ai_client.PROVIDERS,
+        costs=job_extras.cost_settings(),
+        materials=spools.MATERIALS,
+    )
+
+
 @app.route("/settings/account", methods=["POST"])
 @login_required
 def settings_account():
@@ -279,12 +336,12 @@ def settings_server():
     raw = request.form.get("port", "").strip()
     if not raw.isdigit() or not 1024 <= int(raw) <= 65535:
         flash("Port invalide : choisis un nombre entre 1024 et 65535.", "error")
-        return redirect(url_for("settings_page"))
+        return _back()
     settings_store.save({"port": int(raw)})
     if appliance.status()["kiosk_enabled"]:
         appliance.enable_kiosk(int(raw))     # le plein écran doit ouvrir la nouvelle adresse
     flash(f"Port {raw} enregistré : il sera utilisé au prochain démarrage de Bambu Control.", "ok")
-    return redirect(url_for("settings_page"))
+    return _back()
 
 
 @app.route("/settings/startup", methods=["POST"])
@@ -304,7 +361,7 @@ def settings_startup():
         flash("Aucun changement.", "ok")
     for ok, message in results:
         flash(message, "ok" if ok else "error")
-    return redirect(url_for("settings_page"))
+    return _back()
 
 
 @app.route("/printers", methods=["GET"])
@@ -332,9 +389,9 @@ def printers_add():
     serial = request.form.get("serial", "").strip()
 
     if not name or not ip or not access_code or not serial:
-        return _printers_page("Tous les champs (nom, IP, access code, numéro de série) sont requis.", 400)
+        return _printer_form_error("Tous les champs (nom, IP, access code, numéro de série) sont requis.", 400)
     if not is_valid_host(ip):
-        return _printers_page(f"Adresse IP invalide : « {ip} ».", 400)
+        return _printer_form_error(f"Adresse IP invalide : « {ip} ».", 400)
     if model not in models.PRINTER_MODELS:
         model = "OTHER"
 
@@ -344,7 +401,9 @@ def printers_add():
     )
     bc.manager.add_and_start(new_printer)
     session["selected_printer"] = new_printer["id"]
-    return redirect(url_for("settings_page"))
+    if request.form.get("next"):
+        flash(f"Imprimante « {name} » ajoutée.", "ok")
+    return _back()
 
 
 @app.route("/printers/edit/<printer_id>", methods=["POST"])
@@ -401,7 +460,7 @@ def printers_delete(printer_id):
     store.delete_printer(printer_id)
     if session.get("selected_printer") == printer_id:
         session.pop("selected_printer", None)
-    return redirect(url_for("settings_page"))
+    return _back()
 
 
 # ── API (paramétrée par ?printer=<id>, sinon l'imprimante sélectionnée) ──

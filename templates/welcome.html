@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% import "_settings_forms.html" as forms with context %}
+{% block title %}Configuration — Bambu Control{% endblock %}
+
+{% block content %}
+<div class="wizard">
+  <nav class="wizard-steps" aria-label="Étapes de la configuration">
+    {% for key, label in steps %}
+    <a href="{{ url_for('welcome', step=key) }}"
+       class="wizard-step {% if loop.index0 == step_index %}current{% elif loop.index0 < step_index %}done{% endif %}"
+       {% if loop.index0 == step_index %}aria-current="step"{% endif %}>
+      <span class="wizard-num">{{ '✓' if loop.index0 < step_index else loop.index }}</span>
+      <span class="wizard-label">{{ label }}</span>
+    </a>
+    {% endfor %}
+  </nav>
+
+  {% for category, message in messages %}
+  <div class="alert {{ 'alert-error' if category == 'error' else 'alert-ok' }}">{{ message }}</div>
+  {% endfor %}
+
+  {# ── 1. Imprimantes ── #}
+  {% if step == "printers" %}
+  <section class="surface"><div class="section">
+    <h1 class="wizard-title">Tes imprimantes</h1>
+    <p class="muted">Ajoute une première imprimante, puis d'autres si tu en as plusieurs. Les informations
+      se trouvent sur l'écran de l'imprimante : <strong>Paramètres → Réseau</strong> (adresse IP, access code)
+      et <strong>Paramètres → Appareil</strong> (numéro de série). Le mode « LAN » doit être activé.</p>
+    {% if printers %}
+    <div class="wizard-printers">
+      {% for p in printers %}
+      <div class="list-item" data-printer="{{ p.id }}">
+        <div style="min-width: 0">
+          <div class="name">{{ p.name }}</div>
+          <div class="meta">{{ model_labels.get(p.model, p.model) }} · <span class="mono">{{ p.ip }}</span></div>
+        </div>
+        <span class="conn connecting" data-conn><span class="conn-dot"></span><span data-conn-label>…</span></span>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="label" style="margin: 22px 0 14px">Ajouter une autre imprimante</div>
+    {% endif %}
+    {{ forms.add_printer(next=here) }}
+  </div></section>
+
+  {# ── 2. Serveur ── #}
+  {% elif step == "server" %}
+  <section class="surface"><div class="section">
+    <h1 class="wizard-title">Serveur</h1>
+    <p class="muted">Le port est le numéro à la fin de l'adresse de la console (5000 par défaut). Ne le change
+      que si un autre logiciel l'utilise déjà.</p>
+    {{ forms.server(next=here) }}
+  </div></section>
+  <section class="surface" style="margin-top: var(--gap)"><div class="section">
+    <div class="label" style="margin-bottom: 14px">Démarrage</div>
+    {{ forms.startup_form(next=here) }}
+  </div></section>
+
+  {# ── 3. Coûts ── #}
+  {% elif step == "costs" %}
+  <section class="surface">
+    {{ forms.costs_form(next=next_step, submit_label="Enregistrer et continuer") }}
+  </section>
+
+  {# ── 4. Intelligence artificielle ── #}
+  {% elif step == "ai" %}
+  <section class="surface">
+    <div class="section" style="padding-bottom: 0">
+      <h1 class="wizard-title">Intelligence artificielle (facultatif)</h1>
+      <p class="muted" style="margin-bottom: 0">Elle explique les erreurs, répond à tes questions et surveille les
+        impressions avec la caméra. Elle demande un service d'IA : <strong>Ollama</strong> gratuit sur le Pi ou un
+        PC, Ollama Cloud, ou un service payant avec une clé. Tu peux passer cette étape et l'activer plus tard
+        dans Paramètres.</p>
+    </div>
+    {{ forms.ai_form(part="services", next=next_step, submit_label="Enregistrer et continuer") }}
+  </section>
+
+  {# ── 5. Automatisations ── #}
+  {% elif step == "automations" %}
+  <section class="surface">
+    {{ forms.ai_form(part="automations", next=next_step, submit_label="Enregistrer et continuer") }}
+  </section>
+
+  {# ── 6. Stock de filament ── #}
+  {% elif step == "filament" %}
+  <p class="muted wizard-intro">Facultatif : enregistre tes bobines pour suivre le poids restant et être prévenu
+    avant de manquer. Tu pourras le faire plus tard dans le menu <strong>Filament</strong>.</p>
+  {% include "_filament_body.html" %}
+
+  {# ── 7. Terminé ── #}
+  {% else %}
+  <section class="surface"><div class="section wizard-done">
+    <h1 class="wizard-title">C'est prêt 🎉</h1>
+    {% if printers %}
+    <p>{{ printers|length }} imprimante{{ 's' if printers|length > 1 }} configurée{{ 's' if printers|length > 1 }} :
+      {{ printers|map(attribute='name')|join(', ') }}.</p>
+    {% else %}
+    <div class="alert alert-warn">Aucune imprimante n'est encore ajoutée : la console en a besoin.
+      <a href="{{ url_for('welcome', step='printers') }}">Ajouter une imprimante</a></div>
+    {% endif %}
+    <ul class="wizard-summary">
+      <li>Port de la page web : <strong>{{ port }}</strong></li>
+      <li>Électricité : <strong>{{ costs.electricity_price_kwh }} €/kWh</strong>, imprimante
+        <strong>{{ costs.printer_power_w|round|int }} W</strong></li>
+      <li>Intelligence artificielle : <strong>{{ 'activée' if ai.enabled else 'désactivée' }}</strong></li>
+    </ul>
+    <p class="muted">Tout se modifie plus tard dans <strong>Paramètres</strong>, où tu peux aussi relancer cet assistant.</p>
+    <div class="row" style="justify-content: flex-start; gap: 10px; flex-wrap: wrap">
+      <a class="btn btn-primary btn-lg" href="{{ url_for('index') }}">Ouvrir la console</a>
+      <a class="btn btn-lg" href="{{ url_for('settings_page') }}">Paramètres</a>
+    </div>
+  </div></section>
+  {% endif %}
+
+  {% if step != "done" %}
+  <div class="wizard-nav">
+    {% if prev_step %}<a class="btn" href="{{ prev_step }}">← Précédent</a>{% else %}<span></span>{% endif %}
+    {% if step == "printers" and not printers %}
+    <a class="link-button" href="{{ next_step }}">Passer pour l'instant</a>
+    {% elif step in ("costs", "ai", "automations") %}
+    <a class="link-button" href="{{ next_step }}">Passer cette étape</a>
+    {% else %}
+    <a class="btn btn-primary" href="{{ next_step }}">Suivant →</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if step in ("printers", "ai") %}
+<script src="{{ url_for('static', filename='js/settings.js', v=asset_version) }}"></script>
+{% elif step == "filament" %}
+<script src="{{ url_for('static', filename='js/filament.js', v=asset_version) }}"></script>
+{% endif %}
+{% endblock %}

@@ -12,6 +12,7 @@ import job_extras
 import printers_store as store
 import settings_store
 import spools as spools_module
+import auth
 from auth import login_required
 
 MEDIA_NAME = re.compile(r"^[A-Za-z0-9_.-]+\.(png|jpg|mp4|avi|mkv)$", re.I)
@@ -76,6 +77,8 @@ def create_blueprint(resolve_worker, extras: job_extras.JobExtras, spool_store: 
                 costs[key] = value
         settings_store.save({"costs": {**job_extras.cost_settings(), **costs}})
         flash("Réglages des coûts enregistrés (pour les prochaines impressions).", "ok")
+        if form.get("next"):
+            return redirect(auth.safe_next_url(form["next"]))
         return redirect(url_for("settings_page") + "#costs")
 
     @bp.route("/api/history/costs")

@@ -588,3 +588,24 @@ input[type=time].input-inline { width: 104px; }
 .job-costs { margin: 16px 0 10px; }
 @media (min-width: 761px) and (max-width: 1100px) { .stats { grid-template-columns: repeat(3, 1fr); } }
 .job-images img { max-height: 320px; object-fit: contain; background: var(--surface-2); }
+
+/* ── Assistant de première configuration (/welcome) ── */
+.wizard { max-width: 980px; margin: 0 auto; }
+.wizard-steps { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: var(--gap); }
+.wizard-step { display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 8px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+.wizard-step:hover { border-color: var(--line-strong); color: var(--text); }
+.wizard-num { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%;
+  background: var(--line); color: var(--text); font-weight: 700; font-size: 0.85rem; }
+.wizard-step.done .wizard-num { background: rgba(43, 182, 115, 0.18); color: var(--ok); }
+.wizard-step.current { border-color: var(--accent); color: var(--text); font-weight: 650; }
+.wizard-step.current .wizard-num { background: var(--accent); color: var(--accent-ink); }
+.wizard-title { font-size: 1.5rem; margin: 0 0 8px; }
+.wizard-intro { margin: 0 0 16px; }
+.wizard-printers { margin: 8px 0 0; }
+.wizard-nav { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: var(--gap); }
+.wizard-summary { line-height: 1.9; padding-left: 20px; }
+@media (max-width: 700px) {
+  .wizard-step:not(.current) .wizard-label { display: none; }
+  .wizard-step { padding: 6px; }
+}

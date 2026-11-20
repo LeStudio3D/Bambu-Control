@@ -1,0 +1,50 @@
+{# Stock de filament : partagé par la page Filament et l'assistant (/welcome). JS : filament.js #}
+<div class="columns">
+  <section class="surface">
+    <div class="section">
+      <div class="section-head">
+        <span class="label">Stock de filament</span>
+        <button type="button" class="btn btn-small btn-primary" id="spool-add">Ajouter une bobine</button>
+      </div>
+      <div class="spool-summary muted" id="spool-summary"></div>
+      <div id="spools"><div class="muted">Chargement…</div></div>
+      <p class="hint">Pose une bobine sur un emplacement (AMS ou support externe) : le filament de chaque
+        impression y est décompté automatiquement, et une alerte prévient quand il en reste peu.</p>
+    </div>
+  </section>
+
+  <section class="surface" id="spool-editor" hidden>
+    <form class="section" id="spool-form" novalidate>
+      <div class="section-head"><span class="label" id="spool-form-title">Nouvelle bobine</span>
+        <button type="button" class="link-button" id="spool-cancel">Fermer</button></div>
+      <div class="field"><label for="sp-name">Nom</label>
+        <input class="input" id="sp-name" name="name" maxlength="80" placeholder="Ex. Bambu PLA Basic blanc" required></div>
+      <div class="spool-grid">
+        <div class="field"><label for="sp-material">Matériau</label>
+          <select class="input" id="sp-material" name="material">
+            {% for m in materials %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+          </select></div>
+        <div class="field"><label for="sp-color">Couleur</label>
+          <input class="input" id="sp-color" name="color" type="color" value="#ffffff"></div>
+        <div class="field"><label for="sp-weight">Poids de filament neuf (g)</label>
+          <input class="input" id="sp-weight" name="weight_g" type="number" min="50" max="10000" step="1" value="1000"></div>
+        <div class="field"><label for="sp-remaining">Poids restant (g)</label>
+          <input class="input" id="sp-remaining" name="remaining_g" type="number" min="0" max="10000" step="1" value="1000"></div>
+        <div class="field"><label for="sp-price">Prix au kilo (€)</label>
+          <input class="input" id="sp-price" name="price_kg" type="number" min="0" max="1000" step="0.01" placeholder="facultatif"></div>
+        <div class="field"><label for="sp-alert">Alerte sous (g)</label>
+          <input class="input" id="sp-alert" name="alert_g" type="number" min="0" max="5000" step="10" value="100"></div>
+        <div class="field"><label for="sp-printer">Imprimante</label>
+          <select class="input" id="sp-printer" name="printer_id"><option value="">En stock (rangée)</option></select></div>
+        <div class="field"><label for="sp-slot">Emplacement</label>
+          <select class="input" id="sp-slot" name="slot"><option value="">—</option></select></div>
+      </div>
+      <p class="hint">Poids restant : pèse la bobine et retire le poids de la bobine vide (environ 250 g pour
+        une bobine Bambu en plastique, 130 g en carton).</p>
+      <div class="row" style="justify-content: flex-start; gap: 10px">
+        <button type="submit" class="btn btn-primary">Enregistrer</button>
+        <button type="button" class="btn btn-danger" id="spool-archive" hidden>Retirer du stock</button>
+      </div>
+    </form>
+  </section>
+</div>
