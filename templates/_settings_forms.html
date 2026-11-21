@@ -53,6 +53,20 @@
 {% endmacro %}
 
 {# ── Démarrage automatique et plein écran ── #}
+{% macro theme_form(next="") %}
+<form method="POST" action="{{ url_for('settings_theme') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {{ next_field(next) }}
+  <div class="theme-choice">
+    <label class="theme-option"><input type="radio" name="theme" value="dark" {{ 'checked' if theme != 'light' }}>
+      <span class="theme-preview theme-preview-dark"></span> Sombre</label>
+    <label class="theme-option"><input type="radio" name="theme" value="light" {{ 'checked' if theme == 'light' }}>
+      <span class="theme-preview theme-preview-light"></span> Clair</label>
+  </div>
+  <button type="submit" class="btn btn-primary">Appliquer le thème</button>
+</form>
+{% endmacro %}
+
 {% macro startup_form(next="") %}
 {% if startup.can_autostart or startup.can_kiosk %}
 <form method="POST" action="{{ url_for('settings_startup') }}">

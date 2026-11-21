@@ -96,7 +96,8 @@ ASSET_VERSION = str(int(max(p.stat().st_mtime for p in (config.BASE_DIR / "stati
 @app.context_processor
 def inject_globals():
     """Variables disponibles dans tous les templates (barre d'état, navigation)."""
-    data = {"csrf_token": auth.csrf_token, "asset_version": ASSET_VERSION}
+    data = {"csrf_token": auth.csrf_token, "asset_version": ASSET_VERSION,
+            "theme": settings_store.load().get("theme", "dark")}
     if session.get("logged_in"):
         printers = [store.public_view(p) for p in store.list_printers()]
         selected = _selected_printer_id() if printers else None
@@ -425,6 +426,18 @@ def settings_server():
         appliance.enable_kiosk(int(raw))     # le plein écran doit ouvrir la nouvelle adresse
     flash(f"Port {raw} enregistré : il sera utilisé au prochain démarrage de Bambu Control.", "ok")
     return _back()
+
+
+@app.route("/settings/theme", methods=["POST"])
+@login_required
+def settings_theme():
+    theme = request.form.get("theme")
+    if theme not in ("dark", "light"):
+        flash("Thème inconnu.", "error")
+        return _back("#appearance")
+    settings_store.save({"theme": theme})
+    flash("Thème clair activé." if theme == "light" else "Thème sombre activé.", "ok")
+    return _back("#appearance")
 
 
 @app.route("/settings/startup", methods=["POST"])

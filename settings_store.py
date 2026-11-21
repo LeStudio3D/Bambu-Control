@@ -22,6 +22,7 @@ DEFAULTS = {
     "secret_key": None,
     "host": config.DEFAULT_HOST,
     "port": config.DEFAULT_PORT,
+    "theme": "dark",  # apparence de la console : "dark" (sombre) ou "light" (clair)
 }
 
 

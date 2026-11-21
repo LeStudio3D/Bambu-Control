@@ -557,7 +557,8 @@ input[type=time].input-inline { width: 104px; }
 .spool-main { display: grid; gap: 3px; min-width: 0; }
 .spool-main strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .spool-main .muted { font-size: 0.85rem; }
-.spool-main .progress { height: 6px; margin: 4px 0 0; }
+.spool-main .progress { display: block; height: 6px; margin: 4px 0 0; }
+.spool-main .progress-fill { display: block; }
 .spool.is-low .progress-fill { background: var(--warn); }
 .spool-left { display: grid; justify-items: end; gap: 2px; font-size: 0.85rem; }
 .spool-left strong { font-size: 1rem; }
@@ -613,3 +614,53 @@ input[type=time].input-inline { width: 104px; }
 .wizard-import summary::-webkit-details-marker { display: none; }
 .wizard-import summary strong::before { content: "▸ "; color: var(--accent); }
 .wizard-import[open] summary strong::before { content: "▾ "; }
+
+/* ── Thème clair (Paramètres → Apparence) ──
+   Mêmes variables que le thème sombre : seules les couleurs changent. */
+:root[data-theme="light"] {
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --surface-2: #f1f4f6;
+  --surface-3: #e5eaee;
+  --line: #e0e5ea;
+  --line-strong: #c9d0d7;
+
+  --text: #14181c;
+  --muted: #5c6670;
+  --faint: #8d969f;
+
+  --accent: #1f9d5f;
+  --accent-ink: #ffffff;
+  --ok: #1a8c54;
+  --warn: #b8780f;
+  --danger: #d23a31;
+  --info: #2a73d0;
+  color-scheme: light;
+}
+:root[data-theme="light"] .surface { box-shadow: 0 1px 2px rgba(20, 30, 40, 0.06), 0 4px 16px rgba(20, 30, 40, 0.05); }
+:root[data-theme="light"] .btn-primary:hover:not(:disabled) { background: #188a52; }
+:root[data-theme="light"] .alert-error,
+:root[data-theme="light"] .unavailable strong,
+:root[data-theme="light"] .bubble.error,
+:root[data-theme="light"] .ai-line.is-alert { color: #b3261e; }
+:root[data-theme="light"] .alert-warn { color: #8a5a00; }
+:root[data-theme="light"] .alert-ok { color: #126b40; }
+:root[data-theme="light"] .ams-swatch,
+:root[data-theme="light"] .spool-swatch { border-color: rgba(0, 0, 0, 0.14); }
+:root[data-theme="light"] .plate img { background: #f1f4f6; }
+:root[data-theme="light"] .dialog::backdrop { background: rgba(20, 30, 40, 0.35); }
+
+/* Choix du thème */
+.theme-choice { display: flex; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
+.theme-option { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid var(--line-strong);
+  border-radius: var(--radius); cursor: pointer; }
+.theme-option:has(input:checked) { border-color: var(--accent); }
+.theme-preview { width: 44px; height: 30px; border-radius: 6px; border: 1px solid var(--line-strong); }
+.theme-preview-dark { background: linear-gradient(135deg, #0d1013 50%, #2bb673 50%); }
+.theme-preview-light { background: linear-gradient(135deg, #ffffff 50%, #1f9d5f 50%); }
+/* Sur l'image de la caméra (toujours sombre) : textes et boutons restent blancs */
+:root[data-theme="light"] .camera .chip,
+:root[data-theme="light"] .camera .icon-btn,
+:root[data-theme="light"] .camera-message strong { color: #fff; }
+:root[data-theme="light"] .icon-btn { background: var(--surface-2); border-color: var(--line-strong); }
+:root[data-theme="light"] .camera .icon-btn { background: rgba(0, 0, 0, 0.6); border-color: rgba(255, 255, 255, 0.15); }
